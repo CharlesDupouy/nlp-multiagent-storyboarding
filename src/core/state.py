@@ -31,8 +31,9 @@ class UserProfile:
     """
     interests: list[str] = field(default_factory=list)
     themes: list[str] = field(default_factory=list)
-    preferred_style: str = ""          # e.g. "educational", "entertaining", "news"
+    preferred_style: str = ""          # e.g. "educational", "entertaining", "infotainment"
     raw_summary: str = ""              # free-text profile written by the LLM
+    investigated_insights: list[str] = field(default_factory=list)  # insights from video transcripts
 
 
 @dataclass
@@ -165,6 +166,10 @@ class SharedState:
             md_lines.append(f"- **Interests:** {', '.join(self.user_profile.interests)}")
             md_lines.append(f"- **Themes:** {', '.join(self.user_profile.themes)}")
             md_lines.append(f"- **Style:** {self.user_profile.preferred_style}")
+            if self.user_profile.investigated_insights:
+                md_lines.append(f"- **Deep-Dive Spoken Insights:**")
+                for ins in self.user_profile.investigated_insights:
+                    md_lines.append(f"  - {ins}")
             md_lines.append(f"- **Summary:** {self.user_profile.raw_summary}\n")
 
         return "\n".join(md_lines)

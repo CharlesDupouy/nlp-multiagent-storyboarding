@@ -13,6 +13,9 @@ requests>=2.31.0
 # Data handling
 python-dotenv>=1.0.0   # load .env files for local development
 
+# YouTube metadata & transcript extraction (no API key needed)
+youtube-transcript-api>=1.2.0
+
 # Testing
 pytest>=8.0.0
 
