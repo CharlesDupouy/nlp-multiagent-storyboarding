@@ -84,7 +84,9 @@ flowchart LR
 - YouTube Shorts watch histories from peers
 - Format: `[{"title": "...", "url": "https://..."}]`
 - Represented in agent prompts cleanly as `[vid1] Title: "..." | URL: ...`
-- **Status:** Sample created (`data/user_histories/example.json`). Full dataset collection 🔲 TODO (Antoine).
+- **Collector Tool:** Client-side 1-click bookmarklet + tutorial web page (`tools/history_collector/index.html`) created and ready for distribution.
+- **Ingestion Helper:** `src/tools/import_user_history.py` validates and saves participant files to `data/user_histories/<user>.json`.
+- **Status:** Tooling complete; peer recruitment & data collection in progress (Antoine / Team).
 - > [!CAUTION]
   > Must be anonymised before storage. Do not commit real user data to git.
 

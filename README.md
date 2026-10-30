@@ -21,8 +21,23 @@ python main.py --config configs/config.yaml --history data/user_histories/exampl
 python main.py --config configs/config.yaml --history data/user_histories/example.json --baseline
 
 # 5. Run tests
-pytest tests/
+python3 -m unittest discover tests/
 ```
+
+## Collecting Real User Histories for Evaluation
+
+To collect watch histories from study participants without API keys or credentials:
+1. Share `tools/history_collector/index.html` with your participants (or host it on GitHub Pages).
+2. The participant drags the **📌 Export Shorts History** bookmarklet to their browser bar.
+3. They visit [youtube.com/feed/history](https://www.youtube.com/feed/history), click the bookmark, and download `youtube_shorts_history.json`.
+4. Ingest their exported file into the pipeline:
+   ```bash
+   python3 src/tools/import_user_history.py --input /path/to/downloaded.json --user participant_alice
+   ```
+5. Run the storyboarding generator:
+   ```bash
+   python3 main.py --history data/user_histories/participant_alice.json
+   ```
 
 ## Project Structure
 
