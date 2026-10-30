@@ -16,11 +16,11 @@
 
 | Component | Owner | Status |
 |---|---|---|
-| Data collection & public dataset filtering | Antoine | 🔲 TODO |
-| Single-agent baseline | Antoine | 🟢 Implemented & tested on real user data |
-| Multi-agent framework (core architecture) | Charles | 🟢 Two-round profiling + 5-phase feedback loop complete & tested |
-| Prompt engineering & refinement | Charles | 🟢 v2.0 active (Infotainment focus + 2-round profiler) |
-| Real API integration (news, images) | Charles | 🟡 YouTube transcripts & oEmbed integrated; web news/image keys next |
+| Data collection & public dataset filtering | Antoine | 🔲 In progress (Peer collector live on GitHub Pages) |
+| Single-agent baseline | Antoine | 🟢 Implemented, neutralized & tested on real user data |
+| Multi-agent framework (core architecture) | Charles | 🟢 Writers' Room + Director + Targeted Retrieval complete & tested (v3.0) |
+| Prompt engineering & refinement | Charles | 🟢 v3.0 active (Adaptive user style + neutral baseline) |
+| Real API integration (news, images) | Charles | 🟢 100% Complete (NewsAPI + Unsplash + YouTube transcripts integrated & live) |
 | LLM-as-a-judge evaluator | Max | 🔲 Next up (`evaluation/evaluator.py`) |
 | Automated evaluation over dataset | Max | 🔲 TODO |
 | Demo sketch renderer (TTS + images) | Max | 🔲 TODO |
@@ -168,10 +168,10 @@ flowchart LR
 - [x] Orchestrator pipeline with 5-phase execution
 - [x] Single-agent baseline aligned with identical I/O contract and tested
 - [x] Config and .env setup (with automatic python-dotenv loading)
-- [x] Unit tests passing (`python3 -m unittest discover tests` — 5 unit tests)
+- [x] Unit tests passing (`python3 -m unittest discover tests` — 6 unit tests)
 - [x] End-to-end pipeline run verified on real DeepSeek API and 94 real watch history items
-- [ ] Real API integration for news (replace mock in `src/tools/news_tool.py`)
-- [ ] Real API integration for images (replace mock in `src/tools/image_tool.py`)
+- [x] Real API integration for news (NewsAPI.org live in `src/tools/news_tool.py`)
+- [x] Real API integration for images (Unsplash API live in `src/tools/image_tool.py`)
 - [x] Baseline tested and producing output on example and real user data
 
 ### Final Report (Dec 4)
@@ -195,8 +195,9 @@ flowchart LR
 | 2026-10-30 | `20261030_233028_8f65d1f9` | Multi-Agent Pipeline (v2.0) | `deepseek-chat` | Success (6 scenes) | Two-round profiling with spoken transcript extraction; forensic infotainment storyboard on Teletoon |
 | 2026-10-30 | `baseline_20261030_234731_1896cb67` | Single-Agent Baseline (Neutral) | `deepseek-chat` | Success (6 scenes) | Scientifically neutral zero-shot baseline on same 94 videos; focused math paradox storyboard |
 | 2026-10-31 | `20261031_014151_46ff9e3d` | Multi-Agent Pipeline (v3.0 - Writers' Room) | `deepseek-chat` | Success (5 scenes) | Writers' Room (3 candidate pitches) + Director deliberation + Targeted News Retrieval; Bic 4-color pen storyboard |
+| 2026-10-31 | `20261031_015924_4a5dc1c6` | Multi-Agent Pipeline (v3.1 - Live APIs) | `deepseek-chat` | Success (6 scenes) | Fully live tool-augmented run: real NewsAPI articles + real Unsplash photographic CDN assets |
 
-**Budget remaining: ~$49.72 / $50.00**
+**Budget remaining: ~$49.65 / $50.00**
 
 ---
 
