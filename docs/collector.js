@@ -1,15 +1,10 @@
 /**
  * YouTube Shorts Watch History Exporter (COMP 4221 NLP Study)
  *
- * This script runs locally in the user's browser while viewing https://www.youtube.com/feed/history.
- * It automatically scrolls down to load recent entries, identifies all YouTube Shorts,
- * extracts their titles and canonical URLs in chronological order (most recent first),
- * and provides 1-click Download and Copy buttons.
- *
- * 100% Client-side. No passwords, tokens, or personal identifiers are collected.
+ * 100% Trusted-Types / CSP compliant (zero innerHTML sinks).
+ * Uses pure document.createElement, textContent, and appendChild.
  */
 (async function runShortsCollector() {
-  // 1. Check if user is on YouTube History page
   if (!window.location.href.includes("youtube.com")) {
     alert("⚠️ Please open YouTube first!\n\nNavigate to https://www.youtube.com/feed/history and click this bookmark again.");
     window.location.href = "https://www.youtube.com/feed/history";
@@ -20,82 +15,80 @@
   const existingModal = document.getElementById("yt-shorts-collector-modal");
   if (existingModal) existingModal.remove();
 
-  // 2. Inject sleek UI overlay into page
-  const container = document.createElement("div");
-  container.id = "yt-shorts-collector-modal";
-  container.style.cssText = `
-    position: fixed;
-    top: 24px;
-    right: 24px;
-    width: 380px;
-    max-width: calc(100vw - 48px);
-    background: #0f0f13;
-    color: #f1f1f1;
-    border: 1px solid #ff0033;
-    border-radius: 14px;
-    box-shadow: 0 16px 40px rgba(0,0,0,0.85);
-    z-index: 9999999;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    padding: 20px;
-    box-sizing: border-box;
-    line-height: 1.4;
-  `;
+  // Helper to create styled DOM elements without innerHTML (bypasses TrustedHTML)
+  function createEl(tag, cssText, text = "") {
+    const el = document.createElement(tag);
+    if (cssText) el.style.cssText = cssText;
+    if (text) el.textContent = text;
+    return el;
+  }
 
-  container.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <div style="font-weight: 700; font-size: 16px; color: #fff; display: flex; align-items: center; gap: 8px;">
-        <span style="background: #ff0033; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 4px;">SHORTS</span>
-        <span>History Exporter</span>
-      </div>
-      <button id="yt-collector-close-btn" style="background: none; border: none; color: #888; font-size: 18px; cursor: pointer; padding: 0 4px;">✕</button>
-    </div>
-    <div id="yt-collector-status" style="font-size: 13px; color: #aaa; margin-bottom: 14px;">
-      Scanning your watch history...
-    </div>
-    <div id="yt-collector-progress-bar" style="height: 4px; background: #222; border-radius: 2px; overflow: hidden; margin-bottom: 14px;">
-      <div id="yt-collector-progress-inner" style="width: 15%; height: 100%; background: #ff0033; transition: width 0.3s ease;"></div>
-    </div>
-    <div id="yt-collector-preview-list" style="max-height: 140px; overflow-y: auto; background: #16161c; border-radius: 8px; padding: 10px; font-size: 12px; color: #ccc; margin-bottom: 14px; display: none;">
-    </div>
-    <div id="yt-collector-actions" style="display: none; flex-direction: column; gap: 8px;">
-      <button id="yt-collector-download-btn" style="background: #ff0033; color: #fff; border: none; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-        📥 Download my_shorts_history.json
-      </button>
-      <button id="yt-collector-copy-btn" style="background: #272733; color: #eee; border: 1px solid #3c3c4f; padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;">
-        📋 Copy JSON to Clipboard
-      </button>
-      <div style="font-size: 11px; color: #777; text-align: center; margin-top: 4px;">
-        COMP 4221 NLP Study • Anonymous & Private
-      </div>
-    </div>
-  `;
+  // 1. Build Container
+  const container = createEl(
+    "div",
+    "position:fixed;top:24px;right:24px;width:380px;max-width:calc(100vw - 48px);background:#0f0f13;color:#f1f1f1;border:1px solid #ff0033;border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,0.85);z-index:9999999;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;padding:20px;box-sizing:border-box;line-height:1.4;"
+  );
+  container.id = "yt-shorts-collector-modal";
+
+  // Header row
+  const header = createEl("div", "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;");
+  const titleBox = createEl("div", "font-weight:700;font-size:16px;color:#fff;display:flex;align-items:center;gap:8px;");
+  const badge = createEl("span", "background:#ff0033;color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:4px;", "SHORTS");
+  const titleText = createEl("span", "", "History Exporter");
+  titleBox.appendChild(badge);
+  titleBox.appendChild(titleText);
+
+  const closeBtn = createEl("button", "background:none;border:none;color:#888;font-size:18px;cursor:pointer;padding:0 4px;", "✕");
+  closeBtn.onclick = () => container.remove();
+
+  header.appendChild(titleBox);
+  header.appendChild(closeBtn);
+  container.appendChild(header);
+
+  // Status text
+  const statusEl = createEl("div", "font-size:13px;color:#aaa;margin-bottom:14px;", "Scanning your watch history...");
+  container.appendChild(statusEl);
+
+  // Progress bar
+  const progressBar = createEl("div", "height:4px;background:#222;border-radius:2px;overflow:hidden;margin-bottom:14px;");
+  const progressInner = createEl("div", "width:15%;height:100%;background:#ff0033;transition:width 0.3s ease;");
+  progressBar.appendChild(progressInner);
+  container.appendChild(progressBar);
+
+  // Preview container
+  const previewList = createEl("div", "max-height:140px;overflow-y:auto;background:#16161c;border-radius:8px;padding:10px;font-size:12px;color:#ccc;margin-bottom:14px;display:none;");
+  container.appendChild(previewList);
+
+  // Action buttons box
+  const actionsBox = createEl("div", "display:none;flex-direction:column;gap:8px;");
+
+  const downloadBtn = createEl("button", "background:#ff0033;color:#fff;border:none;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;", "📥 Download my_shorts_history.json");
+  const copyBtn = createEl("button", "background:#272733;color:#eee;border:1px solid #3c3c4f;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;", "📋 Copy JSON to Clipboard");
+  const noteEl = createEl("div", "font-size:11px;color:#777;text-align:center;margin-top:4px;", "COMP 4221 NLP Study • Anonymous & Private");
+
+  actionsBox.appendChild(downloadBtn);
+  actionsBox.appendChild(copyBtn);
+  actionsBox.appendChild(noteEl);
+  container.appendChild(actionsBox);
 
   document.body.appendChild(container);
 
-  const statusEl = document.getElementById("yt-collector-status");
-  const progressInner = document.getElementById("yt-collector-progress-inner");
-  const previewList = document.getElementById("yt-collector-preview-list");
-  const actionsEl = document.getElementById("yt-collector-actions");
-  const closeBtn = document.getElementById("yt-collector-close-btn");
-  closeBtn.onclick = () => container.remove();
-
-  // 3. Smooth auto-scroll to fetch recent history
+  // 2. Smooth auto-scroll to fetch recent history
   const SCROLL_STEPS = 5;
   for (let i = 1; i <= SCROLL_STEPS; i++) {
-    statusEl.innerHTML = `Loading history... scrolling (${i}/${SCROLL_STEPS})`;
+    statusEl.textContent = `Loading history... scrolling (${i}/${SCROLL_STEPS})`;
     progressInner.style.width = `${(i / (SCROLL_STEPS + 1)) * 100}%`;
     window.scrollBy({ top: 1800, behavior: "smooth" });
     await new Promise((r) => setTimeout(r, 650));
   }
 
-  statusEl.innerHTML = "Extracting YouTube Shorts...";
+  statusEl.textContent = "Extracting YouTube Shorts...";
   progressInner.style.width = "95%";
 
-  // 4. Extract shorts items from page
+  // 3. Extract shorts items from page
   const shortsList = [];
   const seenUrls = new Set();
 
-  // Strategy A: Find all anchor tags pointing to /shorts/
   const shortAnchors = Array.from(document.querySelectorAll('a[href*="/shorts/"]'));
 
   for (const a of shortAnchors) {
@@ -129,7 +122,6 @@
       title = `YouTube Short (${shortId})`;
     }
 
-    // Remove YouTube duration / metadata chatter if present in aria-label
     title = title.replace(/\s+by\s+.*$/i, "").replace(/\s+-\s+play\s+short$/i, "").trim();
 
     seenUrls.add(canonicalUrl);
@@ -138,35 +130,37 @@
 
   progressInner.style.width = "100%";
 
-  // 5. Present results in modal
+  // 4. Present results in modal
   if (shortsList.length === 0) {
-    statusEl.innerHTML = `
-      <span style="color: #ff9900;">⚠️ No Shorts found yet.</span><br>
-      <span style="font-size: 11px; color: #888;">Make sure you are on <a href="/feed/history" style="color: #ff0033;">Watch History</a> and have watched YouTube Shorts recently while logged in.</span>
-    `;
+    statusEl.textContent = "⚠️ No Shorts found yet. Make sure you are on Watch History and have watched Shorts recently.";
     return;
   }
 
-  statusEl.innerHTML = `✅ Successfully found <strong>${shortsList.length} recent Shorts</strong>!`;
+  statusEl.textContent = `✅ Successfully found ${shortsList.length} recent Shorts!`;
 
-  // Render top preview items
+  // Render preview items
   previewList.style.display = "block";
-  previewList.innerHTML = shortsList
-    .slice(0, 5)
-    .map(
-      (s, idx) =>
-        `<div style="margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          <span style="color: #ff0033; font-weight: bold;">#${idx + 1}</span> ${s.title}
-        </div>`
-    )
-    .join("") + (shortsList.length > 5 ? `<div style="color: #666; font-size: 11px;">+ ${shortsList.length - 5} more items</div>` : "");
+  previewList.replaceChildren();
 
-  actionsEl.style.display = "flex";
+  shortsList.slice(0, 5).forEach((s, idx) => {
+    const row = createEl("div", "margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;");
+    const numSpan = createEl("span", "color:#ff0033;font-weight:bold;margin-right:4px;", `#${idx + 1}`);
+    const labelSpan = createEl("span", "", s.title);
+    row.appendChild(numSpan);
+    row.appendChild(labelSpan);
+    previewList.appendChild(row);
+  });
+
+  if (shortsList.length > 5) {
+    const extra = createEl("div", "color:#666;font-size:11px;margin-top:4px;", `+ ${shortsList.length - 5} more items`);
+    previewList.appendChild(extra);
+  }
+
+  actionsBox.style.display = "flex";
 
   const jsonString = JSON.stringify(shortsList, null, 2);
 
-  // Download Button
-  const downloadBtn = document.getElementById("yt-collector-download-btn");
+  // Download Button handler
   downloadBtn.onclick = () => {
     const blob = new Blob([jsonString], { type: "application/json" });
     const blobUrl = URL.createObjectURL(blob);
@@ -177,30 +171,28 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
-    downloadBtn.innerHTML = "✅ Downloaded!";
+    downloadBtn.textContent = "✅ Downloaded!";
     setTimeout(() => {
-      downloadBtn.innerHTML = "📥 Download my_shorts_history.json";
+      downloadBtn.textContent = "📥 Download my_shorts_history.json";
     }, 2500);
   };
 
-  // Copy to Clipboard Button
-  const copyBtn = document.getElementById("yt-collector-copy-btn");
+  // Copy Button handler
   copyBtn.onclick = async () => {
     try {
       await navigator.clipboard.writeText(jsonString);
-      copyBtn.innerHTML = "✅ Copied to clipboard!";
+      copyBtn.textContent = "✅ Copied to clipboard!";
     } catch (err) {
-      // Fallback
       const ta = document.createElement("textarea");
       ta.value = jsonString;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
-      copyBtn.innerHTML = "✅ Copied to clipboard!";
+      copyBtn.textContent = "✅ Copied to clipboard!";
     }
     setTimeout(() => {
-      copyBtn.innerHTML = "📋 Copy JSON to Clipboard";
+      copyBtn.textContent = "📋 Copy JSON to Clipboard";
     }, 2500);
   };
 })();
