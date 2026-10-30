@@ -58,9 +58,32 @@ def main() -> None:
 
     state = runner.run(videos=videos)
 
-    print(f"\n✅ Done! Storyboard: '{state.storyboard.title}'")
-    print(f"   Scenes: {len(state.storyboard.scenes)}")
-    print(f"   run_id: {state.run_id}")
+    sb = state.storyboard
+    json_path = Path("outputs/storyboards") / f"storyboard_{state.run_id}.json"
+    md_path = json_path.with_suffix(".md")
+
+    print("\n" + "=" * 60)
+    print(f"🎬 STORYBOARD: {sb.title}")
+    print(f"   Duration: {sb.target_duration_seconds}s | Run ID: {state.run_id}")
+    print("=" * 60)
+    print(f"Narrative: {sb.overall_narrative}\n")
+
+    for s in sb.scenes:
+        idx = s.get("scene_id", "?")
+        dur = s.get("duration_seconds", "?")
+        desc = s.get("description", "")
+        sub = s.get("subtitle", "")
+        img = s.get("image_url") or s.get("image_ref") or "None"
+        print(f"  [Scene {idx} ({dur}s)] {desc}")
+        print(f"    Subtitle: \"{sub}\"")
+        if img != "None":
+            print(f"    Visual Asset: {img}")
+        print()
+
+    print("=" * 60)
+    print(f"💾 Saved JSON: file://{json_path.resolve()}")
+    print(f"📄 Saved Markdown: file://{md_path.resolve()}")
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":

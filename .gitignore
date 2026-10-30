@@ -17,8 +17,9 @@ build/
 venv/
 env/
 
-# Outputs (storyboards can be large; commit selectively)
-outputs/
+# Outputs (allow storyboards to be visible in editor)
+outputs/*.tmp
+!outputs/storyboards/
 
 # Data (may contain personal info)
 data/user_histories/*.json

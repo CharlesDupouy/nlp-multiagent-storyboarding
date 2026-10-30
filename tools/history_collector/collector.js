@@ -103,12 +103,18 @@
     // Look for video title
     let title = "";
 
-    // 1. Try video title element inside closest renderer
-    const renderer = a.closest("ytd-video-renderer, ytd-reel-item-renderer, ytd-rich-item-renderer, ytd-grid-video-renderer");
+    // 1. Try video title elements inside closest renderer
+    const renderer = a.closest("ytd-reel-item-renderer, ytd-video-renderer, ytd-rich-item-renderer, ytd-grid-video-renderer, ytd-item-section-renderer");
     if (renderer) {
-      const titleEl = renderer.querySelector("#video-title, #title, h3");
+      const titleEl = renderer.querySelector("#headline, #video-title, #video-title-link, .reel-item-endpoint span, .reel-item-endpoint, h3, #title, yt-formatted-string");
       if (titleEl) {
         title = (titleEl.getAttribute("title") || titleEl.innerText || titleEl.textContent || "").trim();
+      }
+      if (!title) {
+        const thumbImg = renderer.querySelector("img#img[alt]");
+        if (thumbImg && thumbImg.getAttribute("alt")) {
+          title = thumbImg.getAttribute("alt").trim();
+        }
       }
     }
 
@@ -126,6 +132,29 @@
 
     seenUrls.add(canonicalUrl);
     shortsList.push({ title, url: canonicalUrl });
+  }
+
+  // 4. In-browser title enrichment via YouTube public oEmbed
+  const missingItems = shortsList.filter((s) => s.title.startsWith("YouTube Short (") || !s.title);
+  if (missingItems.length > 0) {
+    statusEl.textContent = `Resolving titles (${missingItems.length} videos)...`;
+    for (let i = 0; i < missingItems.length; i += 5) {
+      const batch = missingItems.slice(i, i + 5);
+      await Promise.all(
+        batch.map(async (item) => {
+          try {
+            const res = await fetch(`/oembed?url=${encodeURIComponent(item.url)}&format=json`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.title) {
+                item.title = data.author_name ? `${data.title} (by ${data.author_name})` : data.title;
+              }
+            }
+          } catch (e) {}
+        })
+      );
+      progressInner.style.width = `${95 + Math.min(5, Math.round(((i + 5) / missingItems.length) * 5))}%`;
+    }
   }
 
   progressInner.style.width = "100%";

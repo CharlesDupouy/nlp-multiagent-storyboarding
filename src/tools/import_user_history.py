@@ -13,15 +13,17 @@ This script:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import re
 import sys
 from pathlib import Path
+import requests
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Ingest and validate a participant's YouTube Shorts history."
+        description="Ingest, validate, and enrich a participant's YouTube Shorts history."
     )
     parser.add_argument(
         "--input",
@@ -43,6 +45,11 @@ def parse_args() -> argparse.Namespace:
         default="data/user_histories",
         help="Directory to save the cleaned history JSON file.",
     )
+    parser.add_argument(
+        "--no-enrich",
+        action="store_true",
+        help="Skip automatic title resolution via YouTube public oEmbed API.",
+    )
     return parser.parse_args()
 
 
@@ -50,6 +57,50 @@ def sanitize_username(name: str) -> str:
     """Sanitize participant identifier for safe filenames."""
     cleaned = re.sub(r"[^\w\-_]", "_", name.strip().lower())
     return cleaned or "anonymous_user"
+
+
+def enrich_single_video(video: dict[str, str]) -> dict[str, str]:
+    """Fetch accurate video title and channel name via YouTube's public oEmbed API."""
+    url = video.get("url", "")
+    title = video.get("title", "")
+
+    # Only fetch if title is generic or missing
+    if "YouTube Short (" in title or title.startswith("YouTube Short #") or not title:
+        try:
+            resp = requests.get(
+                f"https://www.youtube.com/oembed?url={url}&format=json",
+                timeout=4,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                t = data.get("title")
+                author = data.get("author_name")
+                if t:
+                    video["title"] = f"{t} (by {author})" if author else t
+        except Exception:
+            pass
+    return video
+
+
+def enrich_titles_in_parallel(videos: list[dict[str, str]], max_workers: int = 15) -> list[dict[str, str]]:
+    """Enrich all video titles concurrently."""
+    needs_enrichment = sum(
+        1 for v in videos
+        if "YouTube Short (" in v.get("title", "") or v.get("title", "").startswith("YouTube Short #") or not v.get("title")
+    )
+    if needs_enrichment == 0:
+        return videos
+
+    print(f"🔄 Resolving real titles for {needs_enrichment} shorts via YouTube public API...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        enriched = list(executor.map(enrich_single_video, videos))
+
+    resolved = sum(
+        1 for v in enriched
+        if "YouTube Short (" not in v.get("title", "") and not v.get("title", "").startswith("YouTube Short #")
+    )
+    print(f"✅ Resolved {resolved}/{len(videos)} real video titles!")
+    return enriched
 
 
 def validate_and_clean_history(raw_data: list) -> list[dict[str, str]]:
@@ -105,6 +156,8 @@ def main() -> None:
 
     try:
         videos = validate_and_clean_history(raw_data)
+        if not args.no_enrich:
+            videos = enrich_titles_in_parallel(videos)
     except ValueError as e:
         print(f"❌ Validation failed: {e}", file=sys.stderr)
         sys.exit(1)
