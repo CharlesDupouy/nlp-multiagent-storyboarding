@@ -13,6 +13,13 @@ from typing import Any
 
 from openai import OpenAI
 
+# Load .env file automatically if present (never committed to git)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 
 def get_client(base_url: str | None = None, api_key: str | None = None) -> OpenAI:
     """
