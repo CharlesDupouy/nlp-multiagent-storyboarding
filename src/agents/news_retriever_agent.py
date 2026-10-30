@@ -38,15 +38,33 @@ class NewsRetrieverAgent(BaseAgent):
         self.num_queries = num_queries
 
     def run(self, state: SharedState) -> SharedState:
-        self._log(state, "Brainstorming news queries from user profile using LLM.")
-
         profile = state.user_profile
-        if not profile.interests and not profile.themes:
-            self._log(state, "No interests or themes found in profile. Skipping news retrieval.")
-            return state
+        pitch = state.selected_pitch
+        director_notes = state.director_notes
 
-        # 1. LLM Brainstorming Pass
-        user_prompt = f"""\
+        if pitch:
+            self._log(state, f"Targeting news & fact retrieval for winning pitch: '{pitch.get('title')}'")
+            user_prompt = f"""\
+WINNING PITCH:
+- Title: {pitch.get('title')}
+- Tone: {pitch.get('target_tone')}
+- Concept: {pitch.get('concept')}
+- 3s Hook: "{pitch.get('hook_3s')}"
+
+DIRECTORIAL NOTES:
+{director_notes or 'Find compelling facts, verified details, and fresh angles.'}
+
+TASK:
+Formulate {self.num_queries} specific search queries to retrieve real-world facts, recent news, controversy details, or proof points to back up this specific story.
+"""
+            system_prompt = _TARGETED_RESEARCH_SYSTEM_PROMPT
+        else:
+            self._log(state, "Brainstorming news queries from user profile using LLM.")
+            if not profile.interests and not profile.themes:
+                self._log(state, "No interests or themes found in profile. Skipping news retrieval.")
+                return state
+
+            user_prompt = f"""\
 USER PROFILE:
 - Specific Interests: {', '.join(profile.interests)}
 - Core Themes: {', '.join(profile.themes)}
@@ -55,10 +73,13 @@ USER PROFILE:
 
 Brainstorm {self.num_queries} specific, compelling search queries for recent news, trending stories, or viral techniques that would interest this user.
 """
+            system_prompt = _NEWS_BRAINSTORM_SYSTEM_PROMPT
+
+        # 1. LLM Brainstorming Pass
         raw_response = chat_completion(
             client=self.client,
             model=self.model,
-            system_prompt=_NEWS_BRAINSTORM_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=0.7,
             max_tokens=500,
@@ -66,16 +87,17 @@ Brainstorm {self.num_queries} specific, compelling search queries for recent new
 
         queries = _parse_queries(raw_response)
         if not queries:
-            # Fallback to top interests if JSON parsing fails
-            self._log(state, "Failed to parse brainstormed queries; falling back to top profile interests.")
-            queries = profile.interests[: self.num_queries]
+            if pitch:
+                queries = [pitch.get("title", "viral story")]
+            else:
+                queries = profile.interests[: self.num_queries]
 
-        self._log(state, f"Brainstormed queries: {queries}")
+        self._log(state, f"Formulated research queries: {queries}")
 
         # 2. Tool Execution Pass
         all_snippets: list[dict[str, str]] = []
         for query in queries:
-            self._log(state, f"Searching news for: '{query}'")
+            self._log(state, f"Searching information for: '{query}'")
             results = search_news(query=query, max_results=self.max_results)
             all_snippets.extend(results)
 
@@ -105,6 +127,27 @@ def _parse_queries(raw: str) -> list[str]:
     return []
 
 
+_TARGETED_RESEARCH_SYSTEM_PROMPT = """\
+You are an expert factual researcher on a high-performing video production team.
+The Director has selected a specific winning story pitch and issued production notes.
+Your task is to formulate 3 precise search queries to retrieve verifiable real-world facts, recent developments, specific controversy records, or technical details that back up this exact story concept.
+
+Guidelines:
+- Align directly with the Director's instructions and the winning concept.
+- Target queries that uncover concrete details: exact dates, real names, statistics, quotes, or counterintuitive evidence.
+- Avoid generic search terms; make queries specific and journalistic.
+
+Return ONLY valid JSON in this format:
+{
+  "queries": [
+    "query 1",
+    "query 2",
+    "query 3"
+  ]
+}
+"""
+
+
 _NEWS_BRAINSTORM_SYSTEM_PROMPT = """\
 You are an investigative pop-culture and storytelling researcher gathering wild, true real-world stories and facts.
 Your goal is to dig up mindblowing external information (bizarre historical anecdotes, shocking real-world controversies, counterintuitive discoveries, or incredible true stories) related to the user's interests.
@@ -123,3 +166,4 @@ Return ONLY valid JSON in this format:
   ]
 }
 """
+

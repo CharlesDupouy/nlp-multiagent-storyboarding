@@ -68,6 +68,41 @@ class TestPipeline(unittest.TestCase):
 
 
 
+    def test_writers_room_and_director_markdown(self):
+        state = SharedState(
+            candidate_pitches=[
+                {
+                    "pitch_id": "pitch1",
+                    "title": "Banned Cartoons",
+                    "target_tone": "Witty forensic",
+                    "hook_3s": "Watch this cartoon clip...",
+                    "concept": "The real reasons Teletoon episodes were banned.",
+                    "user_alignment_reason": "Matches nostalgia interest",
+                },
+                {
+                    "pitch_id": "pitch2",
+                    "title": "Paper to the Moon",
+                    "target_tone": "Curious puzzle",
+                    "hook_3s": "Fold this paper 42 times...",
+                    "concept": "Exponential folding math.",
+                    "user_alignment_reason": "Matches math interest",
+                },
+            ],
+            selected_pitch={
+                "pitch_id": "pitch1",
+                "title": "Banned Cartoons",
+            },
+            director_notes="Make scene 1 fast-paced and highlight censorship documents.",
+            run_id="test_writers_room",
+        )
+        md = state.to_markdown()
+        self.assertIn("Writers' Room: Pitches & Directorial Selection", md)
+        self.assertIn("SELECTED BY DIRECTOR", md)
+        self.assertIn("Banned Cartoons", md)
+        self.assertIn("Directorial Notes & Production Guidance", md)
+        self.assertIn("highlight censorship documents", md)
+
+
 if __name__ == "__main__":
     unittest.main()
 

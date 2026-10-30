@@ -111,6 +111,10 @@ class SharedState:
 
     # --- INTERMEDIATE OUTPUTS (filled by agents in order) ---
     user_profile: UserProfile = field(default_factory=UserProfile)
+    candidate_pitches: list[dict[str, Any]] = field(default_factory=list)  # Writers' Room pitches
+    selected_pitch: dict[str, Any] = field(default_factory=dict)            # Winning pitch
+    director_critique: list[dict[str, Any]] = field(default_factory=list)  # Director reviews of each pitch
+    director_notes: str = ""                                               # Directorial instructions for production
     news_context: NewsContext = field(default_factory=NewsContext)
     image_context: ImageContext = field(default_factory=ImageContext)
 
@@ -160,6 +164,28 @@ class SharedState:
             elif img_ref:
                 md_lines.append(f"- **Image Ref:** `{img_ref}`")
             md_lines.append("")
+
+        if self.candidate_pitches:
+            md_lines.append("## 🎬 Writers' Room: Pitches & Directorial Selection\n")
+            for p in self.candidate_pitches:
+                pid = p.get("pitch_id", "pitch")
+                title = p.get("title", "")
+                tone = p.get("target_tone", "")
+                hook = p.get("hook_3s", "")
+                concept = p.get("concept", "")
+                is_selected = (self.selected_pitch.get("pitch_id") == pid)
+                status = "🏆 **[SELECTED BY DIRECTOR]**" if is_selected else "*[Archived]*"
+                md_lines.append(f"### {status} Pitch `{pid}`: {title}")
+                md_lines.append(f"- **Tone/Vibe:** {tone}")
+                md_lines.append(f"- **3-Second Hook:** *\"{hook}\"*")
+                md_lines.append(f"- **Concept:** {concept}")
+                if p.get("user_alignment_reason"):
+                    md_lines.append(f"- **Audience Fit:** {p.get('user_alignment_reason')}")
+                md_lines.append("")
+
+            if self.director_notes:
+                md_lines.append("### 📋 Directorial Notes & Production Guidance")
+                md_lines.append(f"{self.director_notes}\n")
 
         if self.user_profile.interests:
             md_lines.append("## Inferred User Profile")

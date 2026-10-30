@@ -29,34 +29,40 @@
 
 ## System Architecture
 
-### Pipeline (Two-Pass Grounded Feedback Loop)
+### Pipeline (Writers' Room & Director with Targeted Retrieval & Visual Grounding)
 
 ```mermaid
 flowchart TD
     I["User Watch History\n(vid1, vid2, ... titles + URLs)"] --> P1["Phase 1A: Profiler Round 1\nMacro scan & active selection of 3-4 target videos"]
     P1 --> T1["Tool: youtube_transcript_api\nExtracts actual spoken dialogue & oEmbed channel metadata"]
     T1 --> P2["Phase 1B: Profiler Round 2\nSynthesizes fine-grained profile with concrete spoken insights"]
-    P2 --> N["Phase 2: NewsRetrieverAgent\nLLM brainstorms creative infotainment query angles → Search Tool"]
-    N --> S1["Phase 3: ScriptwriterAgent (Draft Pass)\nDrafts 60s forensic infotainment narrative arc & scenes"]
-    S1 --> IMG["Phase 4: ImageSearchAgent\nAnalyzes draft scenes → photographic search → assigns img1, img2..."]
-    IMG --> S2["Phase 5: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
+    P2 --> WR["Phase 2: WritersRoomAgent\nBrainstorms 3 distinct candidate pitches matching user style"]
+    WR --> DIR["Phase 3: DirectorAgent (Showrunner)\nCritiques all 3 pitches, selects winner & issues production notes"]
+    DIR --> N["Phase 4: NewsRetrieverAgent (Targeted Research)\nFormulates search queries specific to the winning pitch & director notes"]
+    N --> S1["Phase 5: ScriptwriterAgent (Draft Pass)\nDrafts 60s storyboard executing winning pitch + director guidance"]
+    S1 --> IMG["Phase 6: ImageSearchAgent\nAnalyzes draft scenes → photographic search → assigns img1, img2..."]
+    IMG --> S2["Phase 7: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
     S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated 'image_url' (no hallucination)"]
-    RES --> O["Storyboard JSON & Markdown\n(Scenes, Subtitles, Narration, Image URLs)"]
+    RES --> O["Storyboard JSON & Markdown\n(Pitches, Director Decision, Scenes, Subtitles, Narration, Image URLs)"]
 ```
 
 > [!NOTE]
-> **Why this feedback loop over a naive linear pipeline?**  
-> 1. **Scene-tailored visual search:** Rather than searching images blindly for broad themes ("travel"), the visual search agent inspects specific draft scenes ("laminating croissant dough on marble counter") to retrieve fitting imagery.
-> 2. **Refinement grounding:** The scriptwriter gets a second pass to adapt narration and scene descriptions to match the retrieved stock imagery, ensuring visual-auditory harmony.
-> 3. **Symbolic Asset Referencing (`img1`, `img2`, ...):** Decoupling creative image selection from URL handling completely eliminates URL hallucination and keeps prompt contexts compact.
+> **Why this Writers' Room architecture over a linear pipeline?**  
+> 1. **User Style Adaptability:** Instead of forcing every user into an arbitrary documentary format, the Writers' Room proposes 3 distinct concepts matching their natural preferred style (witty humor, craft, pop culture, tech puzzle, or lore).
+> 2. **Parallel Exploration (Exploration vs. Exploitation):** Parallel candidate pitches allow creative breadth before committing to production.
+> 3. **Showrunner Deliberation:** The Director evaluates pitches against 3s hook potential, personal resonance, and visual feasibility.
+> 4. **Targeted Information Retrieval:** The News/Fact Retriever searches for concrete evidence *tailored specifically to the winning pitch* and the Director's instructions.
+> 5. **Symbolic Asset Grounding (`img1`, `img2`, ...):** Decoupling creative image selection from URL handling completely eliminates URL hallucination.
 
 ### Agent Roles
 
 | Agent | Input | Output | Model | Tools |
 |---|---|---|---|---|
-| **ProfilerAgent** | Watch history (`vid1`, `vid2`, ...) | `UserProfile` (interests, themes, style) | `deepseek-chat` | None (LLM-only) |
-| **NewsRetrieverAgent** | `UserProfile` | `NewsContext` (headlines + summaries) | `deepseek-chat` | NewsAPI / Serper (with LLM query brainstorm) |
-| **ScriptwriterAgent (Draft)** | `UserProfile` + `NewsContext` | Draft `Storyboard` (scenes, descriptions, audio) | `deepseek-chat` | None (LLM synthesis) |
+| **ProfilerAgent** | Watch history (`vid1`, `vid2`, ...) | `UserProfile` (interests, themes, style, investigated_insights) | `deepseek-chat` | `youtube_transcript_api` + oEmbed |
+| **WritersRoomAgent** | `UserProfile` + insights | `candidate_pitches` (3 diverse structured story pitches) | `deepseek-chat` | None (Creative synthesis) |
+| **DirectorAgent** | `UserProfile` + `candidate_pitches` | `selected_pitch` + `director_critique` + `director_notes` | `deepseek-chat` | Editorial critique |
+| **NewsRetrieverAgent** | `selected_pitch` + `director_notes` | `NewsContext` (targeted headlines + summaries) | `deepseek-chat` | NewsAPI / Serper / Web Search |
+| **ScriptwriterAgent (Draft)** | `selected_pitch` + `director_notes` + `NewsContext` | Draft `Storyboard` (scenes, descriptions, audio) | `deepseek-chat` | None (LLM synthesis) |
 | **ImageSearchAgent** | Draft `Storyboard` scenes | `ImageContext` (`img1`, `img2`, ... catalog) | `deepseek-chat` | Unsplash / Pexels (keyword search) |
 | **ScriptwriterAgent (Refine)** | Draft `Storyboard` + `ImageContext` | Refined `Storyboard` (`image_ref: 'img1'`) | `deepseek-chat` | Programmatic URL resolver |
 
@@ -188,8 +194,9 @@ flowchart LR
 | 2026-10-30 | `20261030_211708_49b2c57a` | Multi-Agent Pipeline (v1.0) | `deepseek-chat` | Success (7 scenes) | 5-phase feedback loop with scene image search & refinement |
 | 2026-10-30 | `20261030_233028_8f65d1f9` | Multi-Agent Pipeline (v2.0) | `deepseek-chat` | Success (6 scenes) | Two-round profiling with spoken transcript extraction; forensic infotainment storyboard on Teletoon |
 | 2026-10-30 | `baseline_20261030_234731_1896cb67` | Single-Agent Baseline (Neutral) | `deepseek-chat` | Success (6 scenes) | Scientifically neutral zero-shot baseline on same 94 videos; focused math paradox storyboard |
+| 2026-10-31 | `20261031_014151_46ff9e3d` | Multi-Agent Pipeline (v3.0 - Writers' Room) | `deepseek-chat` | Success (5 scenes) | Writers' Room (3 candidate pitches) + Director deliberation + Targeted News Retrieval; Bic 4-color pen storyboard |
 
-**Budget remaining: ~$49.80 / $50.00**
+**Budget remaining: ~$49.72 / $50.00**
 
 ---
 
@@ -197,6 +204,7 @@ flowchart LR
 
 | Date | Decision | Rationale | Alternatives considered |
 |---|---|---|---|
+| 2026-10-31 | Writers' Room + Director + Targeted News Retrieval (v3.0) | Adapts flexibly to any user style (witty humor, craft, puzzle, lore) without forcing a rigid format; parallel candidate pitches enable exploration before commitment; NewsRetriever targets the winning pitch with concrete evidence | Single rigid documentary prompt; blind retrieval before ideation |
 | 2026-10-30 | Strictly Neutral, Competitive Baseline Prompting | Academic integrity: avoids creating a "strawman" baseline. Baseline is held to the identical high standards of thematic focus, narrative arc, and storytelling without biased jokes/skit prompts | Biased/comedic baseline prompts (disingenuous comparison) |
 | 2026-10-30 | Two-Pass Feedback Loop (`Draft -> Image Search -> Refine`) | Ensures image queries match specific scenes rather than generic themes; lets scriptwriter ground descriptions in actual visual assets | Naive linear pipeline (`Image -> Script`) |
 | 2026-10-30 | Two-Round Profiler with Spoken Transcript Extraction | Video titles are often clickbait or vague; Round 1 identifies candidate videos, tool fetches spoken dialogue via `youtube-transcript-api`, Round 2 discovers deep niche interests | Single-pass title-only profiling |

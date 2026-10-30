@@ -11,7 +11,13 @@ models:
   # Model for ProfilerAgent (fast, low-cost — profiling is straightforward)
   profiler: "deepseek-chat"
 
-  # Model for NewsRetrieverAgent (fast — mostly formatting retrieved text)
+  # Model for WritersRoomAgent (creative ideation of candidate pitches)
+  writers_room: "deepseek-chat"
+
+  # Model for DirectorAgent (editorial review & pitch selection)
+  director: "deepseek-chat"
+
+  # Model for NewsRetrieverAgent (targeted factual research on winning pitch)
   retriever: "deepseek-chat"
 
   # Model for ImageSearchAgent (fast — keyword extraction only)

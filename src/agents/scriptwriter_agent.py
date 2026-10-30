@@ -117,28 +117,50 @@ class ScriptwriterAgent(BaseAgent):
 def _build_draft_prompt(state: SharedState, duration: int) -> str:
     profile = state.user_profile
     news = state.news_context
+    pitch = state.selected_pitch
+    director_notes = state.director_notes
 
     news_block = "\n".join(
         f"- {s.get('headline', '')}: {s.get('summary', '')}"
         for s in news.snippets[:6]
     ) or "No news snippets available."
 
+    pitch_block = ""
+    if pitch:
+        beats_str = "\n".join(f"  * {b}" for b in pitch.get("core_beats", []))
+        pitch_block = f"""\
+COMMISSIONED PITCH (from Writers' Room)
+======================================
+Title: {pitch.get('title')}
+Target Tone / Vibe: {pitch.get('target_tone')}
+3-Second Hook: "{pitch.get('hook_3s')}"
+Concept Premise: {pitch.get('concept')}
+Core Beats:
+{beats_str}
+
+DIRECTORIAL NOTES (from Showrunner)
+===================================
+{director_notes or 'Execute with tight pacing and strong visual contrast.'}
+"""
+
     return f"""\
+{pitch_block}
 USER PROFILE
 ============
 Interests: {', '.join(profile.interests)}
 Themes:    {', '.join(profile.themes)}
-Style:     {profile.preferred_style}
+Preferred Style: {profile.preferred_style}
 Summary:   {profile.raw_summary}
 
-RECENT NEWS / WEB TRENDS
-========================
+RETRIEVED FACTS & RECENT EVIDENCE
+=================================
 {news_block}
 
 TASK
 ====
 Draft a personalized short-video storyboard (target duration: {duration} seconds).
-Create an engaging hook, smooth transitions, and distinct scenes.
+Faithfully bring the commissioned pitch to life following the Director's notes and integrating the retrieved facts.
+Create an immediate 3-second hook, smooth escalating transitions, and distinct vivid scenes.
 """
 
 
@@ -188,28 +210,29 @@ def _parse_storyboard_response(raw: str) -> dict:
 
 
 _DRAFT_SYSTEM_PROMPT = """\
-You are a premier short-form video entertainer and storyteller.
-Your superpower is using REAL, shocking external facts, news, and true stories to craft an intensely entertaining 60-second video.
+You are a premier short-form video screenwriter and visual storyteller.
+Your superpower is turning creative concepts and real-world facts into gripping, fast-paced 60-second video storyboards.
 
 Core Philosophy:
-- You are NOT a classroom teacher or boring lecturer. You are an entertainer at the top of your game.
-- But you NEVER rely on cheap, empty AI memes. Your entertainment is powered by REAL information from the outside world.
-- Hook the audience with an unbelievable true fact, bizarre real-world incident, or counterintuitive mystery.
-- Keep the energy high, the dialogue sharp, witty, and cinematic.
-- Subtitles: Punchy, memorable story beats and dialogue lines.
-- Audio cues: Dynamic, charismatic voiceover with punchy sound effects and cinematic pacing.
-- Language: Write the script in the primary language of the user's history (e.g. French if the history is French, English if English).
+- Faithfully execute the commissioned story pitch and directorial guidance.
+- Adapt your voice and energy to match the commissioned tone (e.g., witty & comedic, mindbending curiosity, forensic mystery, chill craft, or high-stakes esports).
+- Ground the script using the retrieved real-world facts and evidence—never rely on hollow generic fluff.
+- Deliver an instant 3-second hook that halts the scroll.
+- Ensure narrative progression: each scene must reveal new information, escalate stakes, or provide visual contrast.
+- Subtitles: Punchy, memorable on-screen text (max 12 words per cut, formatted for mobile).
+- Audio cues: Charismatic voiceover lines, dynamic sound effects, or musical beats.
+- Language: Write the script in the primary language of the user's profile/history.
 
 Return ONLY valid JSON with this structure:
 {
-  "title": "Thrilling, entertaining video title",
-  "overall_narrative": "2-3 sentence overview of the thrilling true story being told",
+  "title": "Engaging video title",
+  "overall_narrative": "2-3 sentence overview of the story arc and concept",
   "scenes": [
     {
       "scene_id": 1,
-      "description": "Visual scene description: real locations, authentic action, dramatic close-ups",
+      "description": "Visual scene description: authentic action, dynamic camera movement, distinct visual elements",
       "subtitle": "Punchy on-screen caption (max 12 words)",
-      "audio_cue": "Charismatic voiceover line or sound effect",
+      "audio_cue": "Voiceover line or music/SFX cue",
       "duration_seconds": 10
     }
   ]

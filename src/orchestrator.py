@@ -25,8 +25,10 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from src.agents.director_agent import DirectorAgent
 from src.agents.image_search_agent import ImageSearchAgent
 from src.agents.news_retriever_agent import NewsRetrieverAgent
+from src.agents.pitch_agent import WritersRoomAgent
 from src.agents.profiler_agent import ProfilerAgent
 from src.agents.scriptwriter_agent import ScriptwriterAgent
 from src.core.llm_client import get_client
@@ -35,11 +37,13 @@ from src.core.state import SharedState, UserHistory
 
 class Orchestrator:
     """
-    Manages the sequential multi-agent storyboard generation pipeline.
-
-    Usage:
-        orchestrator = Orchestrator.from_config("configs/config.yaml")
-        storyboard = orchestrator.run(videos=[{"title": "...", "url": "..."}])
+    Manages the sequential multi-agent storyboard generation pipeline:
+      Phase 1: ProfilerAgent (2-round with spoken transcripts)
+      Phase 2: WritersRoomAgent (3 distinct candidate pitches adapting to user vibe)
+      Phase 3: DirectorAgent (Showrunner critiques pitches & selects winner)
+      Phase 4: NewsRetrieverAgent (Targeted news & fact retrieval for winning pitch)
+      Phase 5: ScriptwriterAgent (Draft Pass based on winning pitch & director notes)
+      Phase 6: ImageSearchAgent & ScriptwriterAgent (Refine Pass grounded to images)
     """
 
     def __init__(
@@ -48,6 +52,8 @@ class Orchestrator:
         retriever_model: str,
         image_model: str,
         scriptwriter_model: str,
+        writers_room_model: str | None = None,
+        director_model: str | None = None,
         base_url: str | None = None,
         api_key: str | None = None,
         output_dir: str = "outputs/storyboards",
@@ -55,6 +61,8 @@ class Orchestrator:
         client = get_client(base_url=base_url, api_key=api_key)
 
         self.profiler = ProfilerAgent(model=profiler_model, client=client)
+        self.writers_room = WritersRoomAgent(model=writers_room_model or profiler_model, client=client)
+        self.director = DirectorAgent(model=director_model or scriptwriter_model, client=client)
         self.news_retriever = NewsRetrieverAgent(model=retriever_model, client=client)
         self.image_searcher = ImageSearchAgent(model=image_model, client=client)
         self.scriptwriter = ScriptwriterAgent(model=scriptwriter_model, client=client)
@@ -73,11 +81,14 @@ class Orchestrator:
         with open(config_path, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
 
+        models = cfg.get("models", {})
         return cls(
-            profiler_model=cfg["models"]["profiler"],
-            retriever_model=cfg["models"]["retriever"],
-            image_model=cfg["models"]["image_search"],
-            scriptwriter_model=cfg["models"]["scriptwriter"],
+            profiler_model=models.get("profiler", "deepseek-chat"),
+            writers_room_model=models.get("writers_room", "deepseek-chat"),
+            director_model=models.get("director", "deepseek-chat"),
+            retriever_model=models.get("retriever", "deepseek-chat"),
+            image_model=models.get("image_search", "deepseek-chat"),
+            scriptwriter_model=models.get("scriptwriter", "deepseek-chat"),
             base_url=cfg.get("llm", {}).get("base_url"),
             api_key=cfg.get("llm", {}).get("api_key"),
             output_dir=cfg.get("output_dir", "outputs/storyboards"),
@@ -85,7 +96,7 @@ class Orchestrator:
 
     def run(self, videos: list[dict[str, str]]) -> SharedState:
         """
-        Run the full pipeline for a given user watch history.
+        Run the full multi-agent pipeline for a given user watch history.
 
         Args:
             videos: List of {"title": str, "url": str} dicts.
@@ -102,24 +113,31 @@ class Orchestrator:
         )
         state.log(f"Pipeline started. run_id={run_id}. Videos in history: {len(videos)}.")
 
-        # Phase 1: User Profiling
+        # Phase 1: User Profiling (Two-Round with Spoken Transcripts)
         state.log("--- Phase 1: User Profiling (ProfilerAgent) ---")
         state = self.profiler.run(state)
 
-        # Phase 2: News & Trends Brainstorming + Retrieval
-        state.log("--- Phase 2: News Brainstorming & Retrieval (NewsRetrieverAgent) ---")
+        # Phase 2: Writers' Room Candidate Pitches
+        state.log("--- Phase 2: Writers' Room Ideation (WritersRoomAgent) ---")
+        state = self.writers_room.run(state)
+
+        # Phase 3: Director Deliberation & Selection
+        state.log("--- Phase 3: Pitch Deliberation & Selection (DirectorAgent) ---")
+        state = self.director.run(state)
+
+        # Phase 4: Targeted Fact & News Retrieval (Option A: on Winning Pitch)
+        state.log("--- Phase 4: Targeted Fact & News Retrieval (NewsRetrieverAgent) ---")
         state = self.news_retriever.run(state)
 
-        # Phase 3: Initial Storyboard Draft
-        state.log("--- Phase 3: Storyboard Drafting (ScriptwriterAgent - Draft Pass) ---")
+        # Phase 5: Initial Storyboard Draft (Following Director Notes & News)
+        state.log("--- Phase 5: Storyboard Drafting (ScriptwriterAgent - Draft Pass) ---")
         state = self.scriptwriter.draft(state)
 
-        # Phase 4: Visual Search for Draft Scenes
-        state.log("--- Phase 4: Scene Visual Search (ImageSearchAgent) ---")
+        # Phase 6: Visual Search & Asset Grounding
+        state.log("--- Phase 6: Scene Visual Search (ImageSearchAgent) ---")
         state = self.image_searcher.run(state)
 
-        # Phase 5: Storyboard Refinement & Grounding
-        state.log("--- Phase 5: Storyboard Grounding & Refinement (ScriptwriterAgent - Refine Pass) ---")
+        state.log("--- Phase 7: Storyboard Grounding & Refinement (ScriptwriterAgent - Refine Pass) ---")
         state = self.scriptwriter.refine(state)
 
         state.log("Pipeline complete.")
