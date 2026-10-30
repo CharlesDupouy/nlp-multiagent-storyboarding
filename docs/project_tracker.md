@@ -17,11 +17,11 @@
 | Component | Owner | Status |
 |---|---|---|
 | Data collection & public dataset filtering | Antoine | 🔲 TODO |
-| Single-agent baseline | Antoine | 🟡 Skeleton ready |
-| Multi-agent framework (core architecture) | Charles | 🟢 Two-pass pipeline complete & tested |
-| Prompt engineering & refinement | Charles | 🟡 v1.0 active |
-| Real API integration (news, images) | Charles | 🔲 Next up (tools currently mock-ready) |
-| LLM-as-a-judge evaluator | Max | 🔲 TODO |
+| Single-agent baseline | Antoine | 🟢 Implemented & tested on real user data |
+| Multi-agent framework (core architecture) | Charles | 🟢 Two-round profiling + 5-phase feedback loop complete & tested |
+| Prompt engineering & refinement | Charles | 🟢 v2.0 active (Infotainment focus + 2-round profiler) |
+| Real API integration (news, images) | Charles | 🟡 YouTube transcripts & oEmbed integrated; web news/image keys next |
+| LLM-as-a-judge evaluator | Max | 🔲 Next up (`evaluation/evaluator.py`) |
 | Automated evaluation over dataset | Max | 🔲 TODO |
 | Demo sketch renderer (TTS + images) | Max | 🔲 TODO |
 
@@ -33,13 +33,15 @@
 
 ```mermaid
 flowchart TD
-    I["User Watch History\n(vid1, vid2, ... titles + URLs)"] --> P["Phase 1: ProfilerAgent\nInfers niche interests & themes"]
-    P --> N["Phase 2: NewsRetrieverAgent\nLLM brainstorms creative query angles → Search Tool"]
-    N --> S1["Phase 3: ScriptwriterAgent (Draft Pass)\nGenerates narrative arc & draft scene structure"]
+    I["User Watch History\n(vid1, vid2, ... titles + URLs)"] --> P1["Phase 1A: Profiler Round 1\nMacro scan & active selection of 3-4 target videos"]
+    P1 --> T1["Tool: youtube_transcript_api\nExtracts actual spoken dialogue & oEmbed channel metadata"]
+    T1 --> P2["Phase 1B: Profiler Round 2\nSynthesizes fine-grained profile with concrete spoken insights"]
+    P2 --> N["Phase 2: NewsRetrieverAgent\nLLM brainstorms creative infotainment query angles → Search Tool"]
+    N --> S1["Phase 3: ScriptwriterAgent (Draft Pass)\nDrafts 60s forensic infotainment narrative arc & scenes"]
     S1 --> IMG["Phase 4: ImageSearchAgent\nAnalyzes draft scenes → photographic search → assigns img1, img2..."]
     IMG --> S2["Phase 5: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
     S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated 'image_url' (no hallucination)"]
-    RES --> O["Storyboard JSON\n(Scenes, Subtitles, Audio Cues, Image URLs)"]
+    RES --> O["Storyboard JSON & Markdown\n(Scenes, Subtitles, Narration, Image URLs)"]
 ```
 
 > [!NOTE]
@@ -146,27 +148,29 @@ flowchart LR
 
 ## Milestone Checklist
 
-### October 29 MVP (in progress)
+### October 29 MVP (Complete & Exceeded)
 - [x] Project skeleton created
-- [x] SharedState blackboard defined
-- [x] BaseAgent abstract class
-- [x] ProfilerAgent with structured video input (`vid1`, `vid2`, ...)
-- [x] NewsRetrieverAgent with LLM query brainstorming
-- [x] ScriptwriterAgent with 2-pass Draft + Refine architecture
+- [x] SharedState blackboard defined with markdown and JSON serialization
+- [x] BaseAgent abstract class with unified `.run(state)` contract
+- [x] ProfilerAgent with two-round deep profiling and spoken transcript tool integration
+- [x] YouTube subtitle & metadata extractor (`src/tools/youtube_tool.py`) without API keys
+- [x] Client-side YouTube Shorts history collector bookmarklet (`docs/collector.js` + `docs/index.html`) hosted on GitHub Pages
+- [x] NewsRetrieverAgent with LLM query brainstorming focused on infotainment
+- [x] ScriptwriterAgent with 2-pass Draft + Refine architecture & forensic storytelling
 - [x] ImageSearchAgent with scene-guided queries & symbolic IDs (`img1`, `img2`, ...)
 - [x] Programmatic image URL resolution (zero URL hallucination)
 - [x] Orchestrator pipeline with 5-phase execution
-- [x] Single-agent baseline aligned with identical I/O contract
+- [x] Single-agent baseline aligned with identical I/O contract and tested
 - [x] Config and .env setup (with automatic python-dotenv loading)
-- [x] Unit tests passing (`python3 -m unittest discover tests`)
-- [x] End-to-end pipeline run verified on real DeepSeek API
+- [x] Unit tests passing (`python3 -m unittest discover tests` — 5 unit tests)
+- [x] End-to-end pipeline run verified on real DeepSeek API and 94 real watch history items
 - [ ] Real API integration for news (replace mock in `src/tools/news_tool.py`)
 - [ ] Real API integration for images (replace mock in `src/tools/image_tool.py`)
-- [ ] Baseline tested and producing output on example data
+- [x] Baseline tested and producing output on example and real user data
 
 ### Final Report (Dec 4)
-- [ ] Automated evaluation implemented and run
-- [ ] Human evaluation conducted
+- [ ] Automated evaluation implemented (`evaluation/evaluator.py`) and run
+- [ ] Human evaluation conducted (Blind A/B test)
 - [ ] Results tables and figures
 - [ ] Failure analysis (at least 1 informative failure case)
 - [ ] Limitations and responsible use section
@@ -182,8 +186,10 @@ flowchart LR
 |---|---|---|---|---|---|
 | 2026-10-30 | `20261030_203738_4988344d` | Multi-Agent Pipeline (v0.1) | `deepseek-chat` | Success (6 scenes) | Initial linear pipeline smoke test |
 | 2026-10-30 | `20261030_211708_49b2c57a` | Multi-Agent Pipeline (v1.0) | `deepseek-chat` | Success (7 scenes) | 5-phase feedback loop with scene image search & refinement |
+| 2026-10-30 | `20261030_233028_8f65d1f9` | Multi-Agent Pipeline (v2.0) | `deepseek-chat` | Success (6 scenes) | Two-round profiling with spoken transcript extraction; forensic infotainment storyboard on Teletoon |
+| 2026-10-30 | `baseline_20261030_233212_73152266` | Single-Agent Baseline | `deepseek-chat` | Success (6 scenes) | Zero-shot run on same 94 videos; clip-show mashup baseline |
 
-**Budget remaining: ~\$49.95 / \$50.00**
+**Budget remaining: ~\$49.85 / \$50.00**
 
 ---
 
@@ -192,6 +198,8 @@ flowchart LR
 | Date | Decision | Rationale | Alternatives considered |
 |---|---|---|---|
 | 2026-10-30 | Two-Pass Feedback Loop (`Draft -> Image Search -> Refine`) | Ensures image queries match specific scenes rather than generic themes; lets scriptwriter ground descriptions in actual visual assets | Naive linear pipeline (`Image -> Script`) |
+| 2026-10-30 | Two-Round Profiler with Spoken Transcript Extraction | Video titles are often clickbait or vague; Round 1 identifies candidate videos, tool fetches spoken dialogue via `youtube-transcript-api`, Round 2 discovers deep niche interests | Single-pass title-only profiling |
+| 2026-10-30 | Infotainment & Forensic Storytelling over Cheesy AI Comedy | LLMs struggle with authentic humor, but excel at engaging narrative journalism and surprising real-world curiosities | Pure comedy/meme skits (results in cringe dialogue) |
 | 2026-10-30 | LLM Query Brainstorming in NewsRetrieverAgent | Enables creative, niche cross-topic search angles rather than dumb keyword passthrough | Direct string passthrough of raw profile interests |
 | 2026-10-30 | Symbolic Visual Identifiers (`img1`, `img2`...) + Code Resolution | Eliminates URL hallucination, shortens prompts, ensures robust data integrity | Trusting LLM to copy/paste long image URLs |
 | 2026-10-30 | Pure Python orchestration (no heavy framework) | Full control, complete transparency for report, easy debugging | LangGraph, AutoGen, CrewAI |
