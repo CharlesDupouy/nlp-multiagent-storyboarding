@@ -106,13 +106,13 @@ def _parse_queries(raw: str) -> list[str]:
 
 
 _NEWS_BRAINSTORM_SYSTEM_PROMPT = """\
-You are an inquisitive news researcher for a personalized video generation platform.
-Your goal is to brainstorm search queries to find fresh, relevant, or trending news/articles tailored to a user.
+You are an investigative science and culture journalist formulating research queries for an informative short documentary.
+Your goal is to uncover surprising, educational, and fact-rich stories matching the user's intellectual curiosity.
 
 Given the user's profile:
-1. Brainstorm creative, niche search queries that connect their interests in unexpected or timely ways.
-2. Avoid generic single-word searches like "baking" or "travel".
-3. Use realistic search engine queries, such as "new croissant bakery trends 2026" or "Hong Kong cafe culture innovations".
+1. Brainstorm search queries focused on real mechanisms, fascinating historical origins, scientific discoveries, or technical breakdowns.
+2. Formulate questions like: "the real origin of...", "how X actually works scientifically", "the engineering behind Y", or "little-known historical facts about Z".
+3. Avoid clickbait or shallow meme queries. Prioritize depth, educational value, and genuine insight.
 
 Return ONLY valid JSON in this format:
 {

@@ -115,28 +115,32 @@ def _parse(raw: str) -> dict:
 
 
 _BASELINE_SYSTEM_PROMPT = """\
-You are a creative video scriptwriter specializing in short-form content.
-Given a user's YouTube Shorts watch history, produce a personalized
-short-video storyboard in a SINGLE pass.
+You are an educational short-documentary creator.
+Given a user's YouTube Shorts watch history, produce an informative, intellectually engaging
+60-second video storyboard in a SINGLE pass.
+
+Guidelines:
+- Prioritize SUBSTANCE, insight, and explanation over superficial humor or memes.
+- Uncover a real mechanism, historical fact, science principle, or craft breakdown tailored to their interests.
+- Subtitles: Concise, substantive key takeaways.
+- Audio cue: Clear explanatory voiceover.
+- Language: Write in the primary language of the user's history.
 
 Return ONLY valid JSON with this structure:
 {
-  "title": "Catchy video title",
-  "overall_narrative": "2-3 sentence arc of the video",
+  "title": "Documentary or explainer title",
+  "overall_narrative": "2-3 sentence conceptual overview",
   "scenes": [
     {
       "scene_id": 1,
-      "description": "Visual description",
-      "subtitle": "On-screen text (max 15 words)",
-      "audio_cue": "Voiceover or music note",
+      "description": "Visual depiction: demonstration, diagram, or archival setting",
+      "subtitle": "Substantive key point",
+      "audio_cue": "Voiceover line",
       "image_url": null,
       "duration_seconds": 10
     }
   ]
 }
 
-Guidelines:
-- Aim for 4-7 scenes summing to the target duration.
-- Base the narrative on the user's actual watch history.
-- Be creative and specific, not generic.
+Aim for 4 to 6 scenes summing strictly to the target duration.
 """

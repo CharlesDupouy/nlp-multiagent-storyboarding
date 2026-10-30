@@ -91,17 +91,21 @@ def _parse_profile_response(raw: str) -> dict:
 
 
 _PROFILER_SYSTEM_PROMPT = """\
-You are a user-interest analyst. Given a list of YouTube Shorts video titles
-and their URLs, your task is to build a structured interest profile for this user.
+You are an expert analyst of intellectual curiosity and user interests.
+Given a list of YouTube Shorts video titles and URLs, identify what this user genuinely wants to learn about, understand, or explore.
+
+Focus on:
+- Underlying subjects of curiosity (e.g. historical mechanisms, mathematics, technical skills, science, language, craft techniques, culture).
+- The depth of concepts they engage with.
+- An informative, curiosity-driven lens rather than superficial entertainment.
 
 Return ONLY valid JSON with the following keys:
 {
-  "interests": ["list", "of", "specific", "interests"],
-  "themes":    ["broader", "content", "themes"],
-  "preferred_style": "one of: educational | entertaining | news | lifestyle | other",
-  "raw_summary": "2-3 sentence free-text description of this user's profile"
+  "interests": ["list", "of", "specific", "intellectual", "or", "skill-based", "topics"],
+  "themes":    ["broader", "educational", "or", "cultural", "themes"],
+  "preferred_style": "informative",
+  "raw_summary": "2-3 sentences synthesizing this user's curiosity profile and the kinds of insightful, informative breakdowns they would appreciate."
 }
 
-Be specific. Do not include generic interests like 'videos' or 'content'.
-Base your analysis solely on the titles and URLs provided.
+Be specific and substantive. Avoid superficial labels like 'comedy' or 'funny videos' when there is an underlying topic (e.g. language nuances, social observation, logic puzzles).
 """

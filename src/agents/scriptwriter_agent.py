@@ -188,53 +188,60 @@ def _parse_storyboard_response(raw: str) -> dict:
 
 
 _DRAFT_SYSTEM_PROMPT = """\
-You are an expert short-form video creator (YouTube Shorts / TikTok).
-Draft a compelling, personalized video storyboard based on the user's profile and recent news trends.
+You are an award-winning educational short-documentary creator (similar to Vox, Veritasium, Kurzgesagt, or 3Blue1Brown).
+Your goal is to produce deeply informative, intellectually captivating 60-second video storyboards tailored to the user's curiosity profile.
+
+Guidelines:
+- Aim for SUBSTANCE and INSIGHT over superficial entertainment or forced comedy.
+- Hook with a compelling question, counterintuitive fact, or technical puzzle.
+- Walk the viewer through real mechanisms: historical context, scientific principles, craftsmanship, or mathematical logic.
+- Avoid clickbait slogans or cheesy meme lines. Deliver genuine learning in every scene.
+- Subtitles: Concise, substantive key takeaways or essential data points.
+- Audio cue: Calm, articulate explanatory voiceover with purposeful sound design.
+- Language: Write the script in the primary language of the user's watch history (e.g., French if the history is French, English if English).
 
 Return ONLY valid JSON with this structure:
 {
-  "title": "Catchy video title",
-  "overall_narrative": "2-3 sentence summary of the video arc",
+  "title": "Clear, compelling documentary/explainer title",
+  "overall_narrative": "2-3 sentence overview of the conceptual insight being explained",
   "scenes": [
     {
       "scene_id": 1,
-      "description": "Visual description of what appears on screen",
-      "subtitle": "On-screen text or caption (punchy, max 12 words)",
-      "audio_cue": "Voiceover line or sound effect",
+      "description": "Visual depiction: schematics, archival footage, close-up demonstration, or clear visual evidence",
+      "subtitle": "Informative key point (max 12 words)",
+      "audio_cue": "Explanatory voiceover text or acoustic sound cue",
       "duration_seconds": 10
     }
   ]
 }
 
-Guidelines:
-- 4 to 7 scenes total, summing to the target duration.
-- Each scene must have clear visual descriptions and punchy subtitles.
-- Ground the video in the user's specific tastes.
+Total scenes: 4 to 6 scenes summing strictly to the target duration.
 """
 
 
 _REFINE_SYSTEM_PROMPT = """\
-You are a senior video editor polishing a short-form video storyboard.
-You have been provided with draft scenes and a catalog of available stock imagery (img1, img2, etc.).
+You are a senior documentary editor refining an educational short-video storyboard against retrieved photographic assets (img1, img2, etc.).
 
-Refine the storyboard scenes by grounding them into the available visual assets.
+Refine the storyboard scenes to ground them in the visual evidence available:
+1. Ground the explanation into what is physically visible in the chosen image asset.
+2. Keep the tone intellectually rigorous, informative, and engaging.
+3. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
+4. Ensure the total duration and clear narrative progression are maintained.
+5. Language: Maintain the same language as the draft.
+
 Return ONLY valid JSON with this structure:
 {
-  "title": "Refined video title",
-  "overall_narrative": "Updated narrative summary",
+  "title": "Refined documentary title",
+  "overall_narrative": "Refined conceptual narrative",
   "scenes": [
     {
       "scene_id": 1,
-      "description": "Refined visual description matching the chosen visual asset",
-      "subtitle": "On-screen text or caption",
-      "audio_cue": "Voiceover line or sound effect",
+      "description": "Refined visual description tightly aligned with the selected photographic asset",
+      "subtitle": "Substantive key takeaway",
+      "audio_cue": "Articulate voiceover line",
       "image_ref": "img1",
       "duration_seconds": 10
     }
   ]
 }
-
-CRITICAL RULES:
-- In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
-- Align scene descriptions with the image asset selected so the video visually makes sense.
 """

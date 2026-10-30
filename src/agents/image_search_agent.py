@@ -123,13 +123,14 @@ def _parse_scene_queries(raw: str, num_scenes: int) -> list[dict[str, Any]]:
 
 
 _IMAGE_QUERY_SYSTEM_PROMPT = """\
-You are a cinematographer and visual researcher for short-form video production.
-Your task is to analyze storyboard scenes and formulate specific, high-quality visual search queries
-to find relevant stock photos or videos.
+You are an archival visual researcher and documentary director for educational short-form videos.
+Your task is to analyze storyboard scenes and formulate specific, documentary-grade visual search queries
+to find clear photographic evidence, authentic demonstrations, or informative diagrams.
 
 Guidelines:
-- Create 1 photographic search query for each scene.
-- Describe physical subjects, lighting, and setting (e.g. "close-up golden flaky croissant on marble", "steaming milk tea in Hong Kong cafe").
+- Create 1 high-clarity search query for each scene.
+- Describe physical objects, real tools, authentic environments, diagrams, or precise technical actions (e.g. "electron microscope crystal lattice", "hands tuning acoustic guitar pegs close-up", "ancient manuscript mathematical diagram").
+- Avoid generic stock clichés, staged meme poses, or cartoonish graphics.
 - Keep each query concise (3 to 6 descriptive words).
 
 Return ONLY valid JSON in this format:
@@ -137,7 +138,7 @@ Return ONLY valid JSON in this format:
   "scene_queries": [
     {
       "scene_id": 1,
-      "query": "flaky pastry dough on marble table"
+      "query": "flaky pastry dough lamination layers close-up"
     },
     {
       "scene_id": 2,
