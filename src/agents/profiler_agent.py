@@ -33,10 +33,10 @@ class ProfilerAgent(BaseAgent):
     def run(self, state: SharedState) -> SharedState:
         self._log(state, "Starting user profiling from watch history.")
 
-        # Format the history for the LLM prompt
+        # Format the history for the LLM prompt using structured IDs (vid1, vid2, ...)
         history_text = "\n".join(
-            f"- {v['title']} ({v['url']})"
-            for v in state.user_history.videos
+            f"- [vid{i+1}] Title: \"{v.get('title', '')}\" | URL: {v.get('url', '')}"
+            for i, v in enumerate(state.user_history.videos)
         )
 
         # Load system prompt from file (see prompts/profiler_system.txt)

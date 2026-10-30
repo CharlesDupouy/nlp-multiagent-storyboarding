@@ -74,7 +74,8 @@ class SingleAgentBaseline:
         state.log(f"[BASELINE] Single-agent run started. run_id={run_id}.")
 
         history_text = "\n".join(
-            f"- {v['title']} ({v['url']})" for v in videos
+            f"- [vid{i+1}] Title: \"{v.get('title', '')}\" | URL: {v.get('url', '')}"
+            for i, v in enumerate(videos)
         )
         user_prompt = (
             f"Here is a user's YouTube Shorts watch history:\n\n{history_text}\n\n"

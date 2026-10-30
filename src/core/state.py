@@ -48,18 +48,27 @@ class NewsContext:
 class ImageContext:
     """
     Output of ImageSearchAgent.
-    A list of image results (URL + description) relevant to the storyboard theme.
-    No vision model is used; images are selected by keyword relevance only.
+    A list of image results (ID, URL, query, description) relevant to storyboard scenes.
+    Each image has a discrete ID (e.g. 'img1', 'img2') so the scriptwriter
+    can reference visuals symbolically without hallucinating raw URLs.
     """
-    images: list[dict[str, str]] = field(default_factory=list)
-    # Each entry: {"query": "...", "url": "...", "alt_text": "..."}
+    images: list[dict[str, Any]] = field(default_factory=list)
+    # Each entry: {"image_id": "img1", "query": "...", "url": "...", "alt_text": "..."}
+
+    def get_image_map(self) -> dict[str, dict[str, Any]]:
+        """Return a mapping from image_id -> image entry dict."""
+        return {
+            img.get("image_id", f"img{i+1}"): img
+            for i, img in enumerate(self.images)
+        }
 
 
 @dataclass
 class Storyboard:
     """
     Output of ScriptwriterAgent — the final deliverable.
-    A structured video storyboard with scenes, subtitles, and audio cues.
+    A structured video storyboard with scenes, subtitles, audio cues,
+    and groundable image references.
     """
     title: str = ""
     target_duration_seconds: int = 60
@@ -69,10 +78,24 @@ class Storyboard:
     #   "description": str,       # visual description
     #   "subtitle": str,          # on-screen text / caption
     #   "audio_cue": str,         # voiceover or music note
-    #   "image_url": str | None,  # sourced from ImageContext
+    #   "image_ref": str | None,  # symbolic identifier, e.g. "img1"
+    #   "image_url": str | None,  # programmatically resolved from image_ref
     #   "duration_seconds": int,
     # }
     overall_narrative: str = ""
+
+    def resolve_image_urls(self, image_context: ImageContext) -> None:
+        """
+        Programmatically resolve image_ref ('img1', 'img2') to real image_url.
+        Ensures the LLM never has to handle or hallucinate raw URLs.
+        """
+        img_map = image_context.get_image_map()
+        for scene in self.scenes:
+            ref = scene.get("image_ref")
+            if ref and ref in img_map:
+                scene["image_url"] = img_map[ref].get("url")
+            elif not scene.get("image_url"):
+                scene["image_url"] = None
 
 
 @dataclass

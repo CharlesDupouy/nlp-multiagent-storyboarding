@@ -4,16 +4,19 @@ Orchestrator — controls the multi-agent pipeline.
 The Orchestrator is the single entry point for running the full pipeline.
 It:
   1. Initialises a SharedState from raw user input.
-  2. Calls each agent in sequence (pipeline pattern for MVP).
-  3. Saves the resulting storyboard to the outputs/ directory.
-
-Pipeline order (MVP):
-  ProfilerAgent → NewsRetrieverAgent → ImageSearchAgent → ScriptwriterAgent
+  2. Executes agents in a deliberate feedback loop:
+     - ProfilerAgent: extracts structured user interests
+     - NewsRetrieverAgent: LLM brainstorms & fetches trending news topics
+     - ScriptwriterAgent (Draft Pass): writes initial narrative & scene structure
+     - ImageSearchAgent: formulates photographic queries per scene and indexes assets (img1, img2...)
+     - ScriptwriterAgent (Refinement Pass): aligns scenes with visual assets using symbolic refs
+     - Programmatic Resolution: maps symbolic image refs ('img1') to real image URLs
+  3. Saves the resulting storyboard and execution trace to outputs/.
 
 Design note:
-  The pipeline pattern was chosen for the MVP because it is simple, cheap
-  (linear API calls), and easy to debug. A debate/critique loop can be
-  added later as an ablation experiment for the final report.
+  This architecture ensures images are fetched to serve specific storyboard scenes
+  rather than vague themes, and prevents LLM URL hallucination by decoupling
+  creative reference selection from actual asset URL resolution.
 """
 
 from __future__ import annotations
@@ -49,16 +52,13 @@ class Orchestrator:
         api_key: str | None = None,
         output_dir: str = "outputs/storyboards",
     ) -> None:
-        # Shared LLM client (all agents use the same DeepSeek-compatible client)
         client = get_client(base_url=base_url, api_key=api_key)
 
-        # Instantiate all agents
-        self.agents = [
-            ProfilerAgent(model=profiler_model, client=client),
-            NewsRetrieverAgent(model=retriever_model, client=client),
-            ImageSearchAgent(model=image_model, client=client),
-            ScriptwriterAgent(model=scriptwriter_model, client=client),
-        ]
+        self.profiler = ProfilerAgent(model=profiler_model, client=client)
+        self.news_retriever = NewsRetrieverAgent(model=retriever_model, client=client)
+        self.image_searcher = ImageSearchAgent(model=image_model, client=client)
+        self.scriptwriter = ScriptwriterAgent(model=scriptwriter_model, client=client)
+
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -68,9 +68,9 @@ class Orchestrator:
         Instantiate an Orchestrator from a YAML config file.
         See configs/config.yaml for the expected format.
         """
-        import yaml  # optional dependency, only needed here
+        import yaml
 
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
 
         return cls(
@@ -102,10 +102,25 @@ class Orchestrator:
         )
         state.log(f"Pipeline started. run_id={run_id}. Videos in history: {len(videos)}.")
 
-        # Run each agent sequentially
-        for agent in self.agents:
-            state.log(f"--- Running {agent.name} ---")
-            state = agent.run(state)
+        # Phase 1: User Profiling
+        state.log("--- Phase 1: User Profiling (ProfilerAgent) ---")
+        state = self.profiler.run(state)
+
+        # Phase 2: News & Trends Brainstorming + Retrieval
+        state.log("--- Phase 2: News Brainstorming & Retrieval (NewsRetrieverAgent) ---")
+        state = self.news_retriever.run(state)
+
+        # Phase 3: Initial Storyboard Draft
+        state.log("--- Phase 3: Storyboard Drafting (ScriptwriterAgent - Draft Pass) ---")
+        state = self.scriptwriter.draft(state)
+
+        # Phase 4: Visual Search for Draft Scenes
+        state.log("--- Phase 4: Scene Visual Search (ImageSearchAgent) ---")
+        state = self.image_searcher.run(state)
+
+        # Phase 5: Storyboard Refinement & Grounding
+        state.log("--- Phase 5: Storyboard Grounding & Refinement (ScriptwriterAgent - Refine Pass) ---")
+        state = self.scriptwriter.refine(state)
 
         state.log("Pipeline complete.")
 

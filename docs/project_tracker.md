@@ -8,7 +8,7 @@
 
 ## Research Question (Practical Test)
 
-> *On **personalized short-video storyboarding**, our change — **a tool-augmented multi-agent brainstorming pipeline** — should improve **content creativity and alignment with niche user interests** relative to **a single-agent zero-shot generation baseline**, measured by **LLM-as-a-judge relevance/creativity scores and blind human preference testing** under a budget of **\$50 in API credits and local compute**.*
+> *On **personalized short-video storyboarding**, our change — **a tool-augmented multi-agent brainstorming pipeline with visual grounding** — should improve **content creativity, visual coherence, and alignment with niche user interests** relative to **a single-agent zero-shot generation baseline**, measured by **LLM-as-a-judge relevance/creativity scores and blind human preference testing** under a budget of **\$50 in API credits and local compute**.*
 
 ---
 
@@ -17,10 +17,10 @@
 | Component | Owner | Status |
 |---|---|---|
 | Data collection & public dataset filtering | Antoine | 🔲 TODO |
-| Single-agent baseline | Antoine | 🔲 TODO |
-| Multi-agent framework (core architecture) | Charles | 🟡 Skeleton done |
-| Prompt engineering | Charles | 🔲 TODO |
-| Real API integration (news, images) | Charles | 🔲 TODO |
+| Single-agent baseline | Antoine | 🟡 Skeleton ready |
+| Multi-agent framework (core architecture) | Charles | 🟢 Two-pass pipeline complete & tested |
+| Prompt engineering & refinement | Charles | 🟡 v1.0 active |
+| Real API integration (news, images) | Charles | 🔲 Next up (tools currently mock-ready) |
 | LLM-as-a-judge evaluator | Max | 🔲 TODO |
 | Automated evaluation over dataset | Max | 🔲 TODO |
 | Demo sketch renderer (TTS + images) | Max | 🔲 TODO |
@@ -29,44 +29,44 @@
 
 ## System Architecture
 
-### Pipeline (MVP — Sequential)
+### Pipeline (Two-Pass Grounded Feedback Loop)
 
 ```mermaid
-flowchart LR
-    I["User Watch History\n(titles + URLs)"]
-    subgraph SharedState["Shared State (Blackboard)"]
-        P["ProfilerAgent\n→ user_profile"]
-        N["NewsRetrieverAgent\n→ news_context"]
-        IMG["ImageSearchAgent\n→ image_context"]
-        S["ScriptwriterAgent\n→ storyboard"]
-        P --> N --> IMG --> S
-    end
-    I --> P
-    S --> O["Storyboard JSON\n(output)"]
+flowchart TD
+    I["User Watch History\n(vid1, vid2, ... titles + URLs)"] --> P["Phase 1: ProfilerAgent\nInfers niche interests & themes"]
+    P --> N["Phase 2: NewsRetrieverAgent\nLLM brainstorms creative query angles → Search Tool"]
+    N --> S1["Phase 3: ScriptwriterAgent (Draft Pass)\nGenerates narrative arc & draft scene structure"]
+    S1 --> IMG["Phase 4: ImageSearchAgent\nAnalyzes draft scenes → photographic search → assigns img1, img2..."]
+    IMG --> S2["Phase 5: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
+    S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated 'image_url' (no hallucination)"]
+    RES --> O["Storyboard JSON\n(Scenes, Subtitles, Audio Cues, Image URLs)"]
 ```
 
 > [!NOTE]
-> **Why pipeline over debate loop for MVP?**  
-> Sequential execution is cheaper (linear API cost), easier to debug, and sufficient to prove the core value of retrieval augmentation. A debate/critique loop (agents reviewing each other's outputs) will be explored as an **ablation** for the final report — isolating whether the improvement comes from *retrieval* or *multi-agent debate*.
+> **Why this feedback loop over a naive linear pipeline?**  
+> 1. **Scene-tailored visual search:** Rather than searching images blindly for broad themes ("travel"), the visual search agent inspects specific draft scenes ("laminating croissant dough on marble counter") to retrieve fitting imagery.
+> 2. **Refinement grounding:** The scriptwriter gets a second pass to adapt narration and scene descriptions to match the retrieved stock imagery, ensuring visual-auditory harmony.
+> 3. **Symbolic Asset Referencing (`img1`, `img2`, ...):** Decoupling creative image selection from URL handling completely eliminates URL hallucination and keeps prompt contexts compact.
 
 ### Agent Roles
 
 | Agent | Input | Output | Model | Tools |
 |---|---|---|---|---|
-| **ProfilerAgent** | Watch history (titles + URLs) | `UserProfile` (interests, themes, style) | `deepseek-chat` | None (LLM-only) |
-| **NewsRetrieverAgent** | `UserProfile` | `NewsContext` (headlines + summaries) | `deepseek-chat` | NewsAPI / Serper |
-| **ImageSearchAgent** | `UserProfile` | `ImageContext` (image URLs) | `deepseek-chat` | Unsplash / Pexels |
-| **ScriptwriterAgent** | Full `SharedState` | `Storyboard` (scenes, subtitles, audio) | `deepseek-chat` | None (LLM synthesis) |
+| **ProfilerAgent** | Watch history (`vid1`, `vid2`, ...) | `UserProfile` (interests, themes, style) | `deepseek-chat` | None (LLM-only) |
+| **NewsRetrieverAgent** | `UserProfile` | `NewsContext` (headlines + summaries) | `deepseek-chat` | NewsAPI / Serper (with LLM query brainstorm) |
+| **ScriptwriterAgent (Draft)** | `UserProfile` + `NewsContext` | Draft `Storyboard` (scenes, descriptions, audio) | `deepseek-chat` | None (LLM synthesis) |
+| **ImageSearchAgent** | Draft `Storyboard` scenes | `ImageContext` (`img1`, `img2`, ... catalog) | `deepseek-chat` | Unsplash / Pexels (keyword search) |
+| **ScriptwriterAgent (Refine)** | Draft `Storyboard` + `ImageContext` | Refined `Storyboard` (`image_ref: 'img1'`) | `deepseek-chat` | Programmatic URL resolver |
 
 ### Controlled Comparison
 
 ```mermaid
 flowchart LR
     H["Same user\nwatch history"]
-    H --> MA["Multi-Agent Pipeline\nProfilerAgent → News → Images → Scriptwriter"]
+    H --> MA["Multi-Agent Pipeline\nProfile → News Brainstorm → Draft → Scene Image Search → Refinement"]
     H --> SA["Single-Agent Baseline\nZero-shot, same model, same watch history"]
-    MA --> SB1["Storyboard A"]
-    SA --> SB2["Storyboard B"]
+    MA --> SB1["Storyboard A\n(Grounded with imagery & news)"]
+    SA --> SB2["Storyboard B\n(Zero-shot single pass)"]
     SB1 --> E["Evaluator\nLLM-as-judge + human A/B"]
     SB2 --> E
 ```
@@ -83,7 +83,8 @@ flowchart LR
 ### Real User Histories
 - YouTube Shorts watch histories from peers
 - Format: `[{"title": "...", "url": "https://..."}]`
-- **Status:** 🔲 TODO (Antoine)
+- Represented in agent prompts cleanly as `[vid1] Title: "..." | URL: ...`
+- **Status:** Sample created (`data/user_histories/example.json`). Full dataset collection 🔲 TODO (Antoine).
 - > [!CAUTION]
   > Must be anonymised before storage. Do not commit real user data to git.
 
@@ -97,9 +98,11 @@ flowchart LR
 | All agents model | `deepseek-chat` | Sufficient for pipeline tasks; budget-friendly |
 | Baseline model | `deepseek-chat` | Same model = fair comparison |
 | Temperature (profiler) | 0.4 | Low — factual extraction |
-| Temperature (scriptwriter) | 0.8 | High — creative writing |
+| Temperature (news brainstorm) | 0.7 | Medium — creative angle ideation |
+| Temperature (script draft) | 0.75 | High — creative narrative generation |
+| Temperature (script refine) | 0.6 | Controlled — alignment with visual assets |
 | News API | TBD (NewsAPI or Serper) | — |
-| Image API | TBD (Unsplash or Pexels) | No vision model needed |
+| Image API | TBD (Unsplash or Pexels) | No vision model needed (keyword-driven) |
 
 > [!TIP]
 > For the report's **Reproducibility Statement**, log exact model name, API access date, and decoding params for every experiment run. These are saved in each `storyboard_*.json` output file.
@@ -110,13 +113,13 @@ flowchart LR
 
 | Agent | Prompt File | Version | Last Updated |
 |---|---|---|---|
-| ProfilerAgent | `prompts/profiler_system.txt` | v0.1 (inline) | 2026-10-30 |
-| ScriptwriterAgent | `prompts/scriptwriter_system.txt` | v0.1 (inline) | 2026-10-30 |
-| Baseline | `prompts/baseline_system.txt` | v0.1 (inline) | 2026-10-30 |
-| LLM Judge | `prompts/judge_system.txt` | 🔲 TODO | — |
-
-> [!NOTE]
-> Prompts are currently inline in the agent files. Extract them to `prompts/` once finalised so they can be versioned independently (required for reproducibility package).
+| ProfilerAgent | `src/agents/profiler_agent.py` | v1.0 | 2026-10-30 |
+| NewsRetrieverAgent | `src/agents/news_retriever_agent.py` | v1.0 (LLM brainstorm) | 2026-10-30 |
+| ImageSearchAgent | `src/agents/image_search_agent.py` | v1.0 (Scene-guided visual queries) | 2026-10-30 |
+| ScriptwriterAgent (Draft) | `src/agents/scriptwriter_agent.py` | v1.0 | 2026-10-30 |
+| ScriptwriterAgent (Refine) | `src/agents/scriptwriter_agent.py` | v1.0 | 2026-10-30 |
+| Baseline | `baseline/single_agent_baseline.py` | v1.0 | 2026-10-30 |
+| LLM Judge | `evaluation/evaluator.py` | 🔲 TODO | — |
 
 ---
 
@@ -127,7 +130,8 @@ flowchart LR
   - **Relevance:** Does the storyboard match the user's inferred interests?
   - **Completeness:** Are all storyboard fields filled and coherent?
   - **Creativity:** Is the narrative original and diverse?
-- **Judge model:** `deepseek-chat` (same family, different temperature)
+  - **Visual-Narrative Alignment:** How well do scene descriptions match the assigned image assets?
+- **Judge model:** `deepseek-chat` (or `deepseek-reasoner`)
 - **Scale:** Run over public dataset subset
 
 ### Human Evaluation (Blind A/B)
@@ -144,18 +148,19 @@ flowchart LR
 - [x] Project skeleton created
 - [x] SharedState blackboard defined
 - [x] BaseAgent abstract class
-- [x] ProfilerAgent stub
-- [x] NewsRetrieverAgent stub
-- [x] ImageSearchAgent stub
-- [x] ScriptwriterAgent stub
-- [x] Orchestrator pipeline
-- [x] Single-agent baseline stub
-- [x] Config and .env setup
-- [ ] Real API integration (news)
-- [ ] Real API integration (images)
-- [ ] Full prompt engineering pass
-- [ ] Run on example user history (end-to-end test)
-- [ ] Baseline tested and producing output
+- [x] ProfilerAgent with structured video input (`vid1`, `vid2`, ...)
+- [x] NewsRetrieverAgent with LLM query brainstorming
+- [x] ScriptwriterAgent with 2-pass Draft + Refine architecture
+- [x] ImageSearchAgent with scene-guided queries & symbolic IDs (`img1`, `img2`, ...)
+- [x] Programmatic image URL resolution (zero URL hallucination)
+- [x] Orchestrator pipeline with 5-phase execution
+- [x] Single-agent baseline aligned with identical I/O contract
+- [x] Config and .env setup (with automatic python-dotenv loading)
+- [x] Unit tests passing (`python3 -m unittest discover tests`)
+- [x] End-to-end pipeline run verified on real DeepSeek API
+- [ ] Real API integration for news (replace mock in `src/tools/news_tool.py`)
+- [ ] Real API integration for images (replace mock in `src/tools/image_tool.py`)
+- [ ] Baseline tested and producing output on example data
 
 ### Final Report (Dec 4)
 - [ ] Automated evaluation implemented and run
@@ -171,14 +176,12 @@ flowchart LR
 
 ## Cost & Compute Log
 
-| Date | Component | Model | Tokens in/out | Cost USD | Notes |
+| Date | Run ID | Component | Model | Status / Output | Notes |
 |---|---|---|---|---|---|
-| — | — | — | — | — | No runs yet |
+| 2026-10-30 | `20261030_203738_4988344d` | Multi-Agent Pipeline (v0.1) | `deepseek-chat` | Success (6 scenes) | Initial linear pipeline smoke test |
+| 2026-10-30 | `20261030_211708_49b2c57a` | Multi-Agent Pipeline (v1.0) | `deepseek-chat` | Success (7 scenes) | 5-phase feedback loop with scene image search & refinement |
 
-**Budget remaining: \$50.00**
-
-> [!WARNING]
-> Track every API call cost here. Total budget is \$50. The multi-agent pipeline makes ~4 LLM calls per user (plus tool calls); the baseline makes 1.
+**Budget remaining: ~\$49.95 / \$50.00**
 
 ---
 
@@ -186,21 +189,21 @@ flowchart LR
 
 | Date | Decision | Rationale | Alternatives considered |
 |---|---|---|---|
-| 2026-10-30 | Pipeline (sequential) over debate loop for MVP | Lower cost, simpler debug, sufficient for MVP | Debate loop (planned as ablation) |
-| 2026-10-30 | Pure Python orchestration (no framework) | Full control, transparent for report, easier to understand | LangGraph, AutoGen, CrewAI |
-| 2026-10-30 | DeepSeek API for all agents | OpenAI-compatible, very cheap, capable | GPT-4o (expensive), local models (slow) |
-| 2026-10-30 | Shared state blackboard | Simple, natural top-to-bottom flow, easy to serialize | Message-passing between agents |
-| 2026-10-30 | Image search by keyword only (no vision model) | Keeps cost low, avoids unnecessary complexity | CLIP-based image-text matching |
+| 2026-10-30 | Two-Pass Feedback Loop (`Draft -> Image Search -> Refine`) | Ensures image queries match specific scenes rather than generic themes; lets scriptwriter ground descriptions in actual visual assets | Naive linear pipeline (`Image -> Script`) |
+| 2026-10-30 | LLM Query Brainstorming in NewsRetrieverAgent | Enables creative, niche cross-topic search angles rather than dumb keyword passthrough | Direct string passthrough of raw profile interests |
+| 2026-10-30 | Symbolic Visual Identifiers (`img1`, `img2`...) + Code Resolution | Eliminates URL hallucination, shortens prompts, ensures robust data integrity | Trusting LLM to copy/paste long image URLs |
+| 2026-10-30 | Pure Python orchestration (no heavy framework) | Full control, complete transparency for report, easy debugging | LangGraph, AutoGen, CrewAI |
+| 2026-10-30 | DeepSeek API for all agents | OpenAI-compatible, extremely low cost, strong reasoning | GPT-4o, local quantized LLMs |
+| 2026-10-30 | Image search by keyword only (no vision model) | Keeps compute/API cost low; vision model not required for asset retrieval | Multimodal vision models (expensive) |
 
 ---
 
 ## Known Issues / TODOs
 
-- [ ] `news_tool.py` and `image_tool.py` are mocked — need real API implementations
-- [ ] JSON parsing in agents has no retry logic — add fallback for malformed LLM output
-- [ ] Prompts are inline — move to `prompts/` directory and version them
-- [ ] No token counting / cost tracking per run yet
-- [ ] `ImageSearchAgent` has a model param but makes no LLM call — refactor or remove
+- [ ] `news_tool.py` and `image_tool.py` are mock-ready — need real API keys (NewsAPI / Unsplash)
+- [ ] JSON parsing in agents has simple cleanup fallback — can add retry loop for edge cases
+- [ ] Move system prompts to dedicated `prompts/` text files for cleaner reproducibility archiving
+- [ ] Implement token usage accounting in `state.py` to auto-calculate exact costs
 
 ---
 

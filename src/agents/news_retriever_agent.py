@@ -3,12 +3,13 @@ NewsRetrieverAgent — Agent 2 in the pipeline.
 
 Responsibility:
   - Takes the user profile produced by ProfilerAgent.
-  - Searches for recent news articles / web content relevant to the
-    user's interests and themes.
-  - Returns a list of headlines + summaries to enrich the storyboard.
+  - Uses an LLM to actively brainstorm timely, interesting news and trend angles
+    that intersect the user's specific interests and themes.
+  - Queries external search/news tools with these targeted queries.
+  - Enriches SharedState with retrieved headlines, summaries, and URLs.
 
 Tool used:
-  - src/tools/news_tool.py  (wraps a news/search API — TBD: NewsAPI, Serper, etc.)
+  - src/tools/news_tool.py  (wraps search / news API)
 
 Output written to state:
   - state.news_context  (NewsContext dataclass)
@@ -16,40 +17,109 @@ Output written to state:
 
 from __future__ import annotations
 
+import json
 from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
 from src.core.llm_client import chat_completion
 from src.core.state import NewsContext, SharedState
-from src.tools.news_tool import search_news  # noqa: F401  (to be implemented)
+from src.tools.news_tool import search_news
 
 
 class NewsRetrieverAgent(BaseAgent):
-    """Retrieves recent news relevant to the user's interest profile."""
+    """
+    LLM-driven news and web retrieval agent.
+    Brainstorms creative search topics from user interests before executing tool calls.
+    """
 
-    def __init__(self, model: str, client: OpenAI, max_results: int = 5) -> None:
+    def __init__(self, model: str, client: OpenAI, max_results: int = 3, num_queries: int = 3) -> None:
         super().__init__(name="NewsRetrieverAgent", model=model, client=client)
         self.max_results = max_results
+        self.num_queries = num_queries
 
     def run(self, state: SharedState) -> SharedState:
-        self._log(state, "Starting news retrieval based on user profile.")
+        self._log(state, "Brainstorming news queries from user profile using LLM.")
 
-        # Build search queries from the user profile
-        queries = state.user_profile.interests[:3]  # use top-3 interests
-        if not queries:
-            self._log(state, "No interests found in profile. Skipping news retrieval.")
+        profile = state.user_profile
+        if not profile.interests and not profile.themes:
+            self._log(state, "No interests or themes found in profile. Skipping news retrieval.")
             return state
 
-        all_snippets: list[dict] = []
+        # 1. LLM Brainstorming Pass
+        user_prompt = f"""\
+USER PROFILE:
+- Specific Interests: {', '.join(profile.interests)}
+- Core Themes: {', '.join(profile.themes)}
+- Preferred Style: {profile.preferred_style}
+- Summary: {profile.raw_summary}
+
+Brainstorm {self.num_queries} specific, compelling search queries for recent news, trending stories, or viral techniques that would interest this user.
+"""
+        raw_response = chat_completion(
+            client=self.client,
+            model=self.model,
+            system_prompt=_NEWS_BRAINSTORM_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.7,
+            max_tokens=500,
+        )
+
+        queries = _parse_queries(raw_response)
+        if not queries:
+            # Fallback to top interests if JSON parsing fails
+            self._log(state, "Failed to parse brainstormed queries; falling back to top profile interests.")
+            queries = profile.interests[: self.num_queries]
+
+        self._log(state, f"Brainstormed queries: {queries}")
+
+        # 2. Tool Execution Pass
+        all_snippets: list[dict[str, str]] = []
         for query in queries:
             self._log(state, f"Searching news for: '{query}'")
-            # TODO: implement search_news in src/tools/news_tool.py
             results = search_news(query=query, max_results=self.max_results)
             all_snippets.extend(results)
 
-        # Optionally: use LLM to filter / summarise the fetched snippets
-        # TODO: add LLM-based relevance filtering pass here
-
         state.news_context = NewsContext(snippets=all_snippets)
-        self._log(state, f"Retrieved {len(all_snippets)} news snippets.")
+        self._log(state, f"Retrieved {len(all_snippets)} news snippets across {len(queries)} topics.")
         return state
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _parse_queries(raw: str) -> list[str]:
+    """Parse JSON list of query strings from LLM response."""
+    try:
+        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = json.loads(cleaned)
+        if isinstance(data, list):
+            return [str(q).strip() for q in data if str(q).strip()]
+        if isinstance(data, dict):
+            # Check common keys like "queries" or "search_queries"
+            for k in ("queries", "search_queries", "topics"):
+                if k in data and isinstance(data[k], list):
+                    return [str(q).strip() for q in data[k] if str(q).strip()]
+    except Exception:
+        pass
+    return []
+
+
+_NEWS_BRAINSTORM_SYSTEM_PROMPT = """\
+You are an inquisitive news researcher for a personalized video generation platform.
+Your goal is to brainstorm search queries to find fresh, relevant, or trending news/articles tailored to a user.
+
+Given the user's profile:
+1. Brainstorm creative, niche search queries that connect their interests in unexpected or timely ways.
+2. Avoid generic single-word searches like "baking" or "travel".
+3. Use realistic search engine queries, such as "new croissant bakery trends 2026" or "Hong Kong cafe culture innovations".
+
+Return ONLY valid JSON in this format:
+{
+  "queries": [
+    "query 1",
+    "query 2",
+    "query 3"
+  ]
+}
+"""
