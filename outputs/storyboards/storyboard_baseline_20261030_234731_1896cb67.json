@@ -393,63 +393,57 @@
     "images": []
   },
   "storyboard": {
-    "title": "Le Grand Mix de ton Historique YouTube 🤯",
+    "title": "Le paradoxe mathématique qui rend fou (et que tu utilises tous les jours)",
     "target_duration_seconds": 60,
     "scenes": [
       {
         "scene_id": 1,
-        "description": "Un prof de maths (Lucas Maths) écrit 'Mathctober' au tableau, puis se retourne avec un air sérieux. Soudain, un élève (Crossthememory) lui répond 'La réponse est 42' et le prof s'évanouit.",
-        "subtitle": "Mathctober : le mois qui rend fou",
-        "audio_cue": "VO : 'Bienvenue dans le Mathctober !' + bruit de craie + chute de prof (SFX cartoon)",
-        "image_url": null,
+        "description": "Gros plan sur une feuille A4 blanche posée sur une table en bois. Une main entre dans le champ et la plie une première fois. La caméra zoome sur le pli. Un compteur digital apparaît en surimpression : '1 pli'.",
+        "subtitle": "Une simple feuille de papier...",
+        "audio_cue": "VOIX OFF (ton mystérieux) : 'Et si je te disais que cette feuille peut atteindre la Lune ?' + SFX : bruit de papier plié",
         "duration_seconds": 10
       },
       {
         "scene_id": 2,
-        "description": "Un couple joue à Codenames (Fadily Camara) : la femme donne un indice 'Football', le mari répond 'Ballon' et elle s'énerve. Cut sur un husky (Freezing Husky) qui lève les yeux au ciel.",
-        "subtitle": "Codenames en couple : la logique féminine",
-        "audio_cue": "VO : 'À chacun sa logique !' + rires + aboiement de husky",
-        "image_url": null,
+        "description": "Accéléré : la main plie la feuille de plus en plus vite, mais elle devient rapidement trop épaisse. Des animations graphiques montrent l'épaisseur doubler à chaque pli : 0,1 mm, 0,2 mm, 0,4 mm... La feuille grossit et prend toute la place à l'écran.",
+        "subtitle": "À chaque pli, l'épaisseur double !",
+        "audio_cue": "VOIX OFF : 'À chaque pli, l'épaisseur double. C'est une progression exponentielle.' + SFX : bips électroniques montants",
         "duration_seconds": 10
       },
       {
         "scene_id": 3,
-        "description": "Un extrait de Simpsons (Maggie génie) où Maggie résout une équation, puis Bart fait un job dans une ferme de raisins. Un fan d'anime (ReyD) crie 'Kakashi vs Sakura en 1 minute !'",
-        "subtitle": "Maggie, Bart et les animés : le mix",
-        "audio_cue": "VO : 'Même Maggie comprend les maths !' + thème des Simpsons + cri d'anime",
-        "image_url": null,
+        "description": "Split screen : à gauche, une pile de feuilles pliées devient une tour qui dépasse la Tour Eiffel ; à droite, un graphique en courbe exponentielle explose. Des chiffres défilent : 1 km, 10 km, 100 km... La tour atteint l'espace.",
+        "subtitle": "42 pliages = 439 000 km !",
+        "audio_cue": "VOIX OFF (accélérant) : 'Après 10 plis, tu dépasses le kilomètre. Après 20, tu es dans l'espace. Après 42, tu as dépassé la Lune !' + SFX : whoosh spatial",
         "duration_seconds": 10
       },
       {
         "scene_id": 4,
-        "description": "Un chef (Lionfield) prépare des pâtes franco-italiennes, puis un burger maison (SailorJoyy) et un crabe géant (Amixem). Un chat (Mister_Renoi_TV) essaie de voler la nourriture.",
-        "subtitle": "Pâtes, burger, crabe : le festin",
-        "audio_cue": "VO : 'French Italian Pasta ?' + SFX cuisine + miaulement",
-        "image_url": null,
+        "description": "La feuille pliée géante flotte dans l'espace, la Terre et la Lune en arrière-plan. Une animation montre la distance Terre-Lune (384 400 km) et la pile de papier (439 000 km) côte à côte. La feuille fait un petit sourire.",
+        "subtitle": "La Lune est à 384 400 km...",
+        "audio_cue": "VOIX OFF : 'La Lune est à 384 400 km. Notre feuille pliée 42 fois mesure 439 000 km. Mathématiquement, c'est prouvé !' + musique planante",
         "duration_seconds": 10
       },
       {
         "scene_id": 5,
-        "description": "Un type (Steven He) dit 'Don’t believe everything you see online' puis on voit un gars (Max Parra) tricher avec ses oreilles. Cut sur un saut de Kaatsup (Charles & Mélanie) qui rate.",
-        "subtitle": "Triche et fails : ne crois pas tout",
-        "audio_cue": "VO : 'Ne crois pas tout ce que tu vois !' + SFX triche + bruit de chute",
-        "image_url": null,
+        "description": "Retour sur Terre : la main essaie de plier une feuille réelle une 8e fois, mais n'y arrive pas. La feuille est trop épaisse. Un texte apparaît : 'En pratique, impossible au-delà de 7-8 plis'. La main hausse les épaules.",
+        "subtitle": "Mais en vrai... on ne peut pas !",
+        "audio_cue": "VOIX OFF (amusé) : 'En pratique, impossible de plier une feuille plus de 7 ou 8 fois. Mais les maths, elles, n'ont pas cette limite !' + SFX : ressort qui boing",
         "duration_seconds": 10
       },
       {
         "scene_id": 6,
-        "description": "Montage rapide : un tuto de bracelet (Masha Knots), une guitare 'Get Lucky' (Daft Punk), et une voiture volante Tesla (Estherium). Fin sur un écran 'Abonne-toi !' avec un like.",
-        "subtitle": "Bracelets, guitare et voiture volante",
-        "audio_cue": "VO : 'Et n’oublie pas de t’abonner !' + riff de Get Lucky + whoosh",
-        "image_url": null,
+        "description": "Écran final : la feuille pliée en forme de petite fusée décolle vers la Lune. Le compteur affiche '42'. Un bouton 'Abonne-toi' clignote. Fond étoilé.",
+        "subtitle": "Les maths, c'est magique !",
+        "audio_cue": "VOIX OFF : 'Alors, prêt à plier ? Abonne-toi pour plus de paradoxes mathématiques !' + SFX : décollage de fusée",
         "duration_seconds": 10
       }
     ],
-    "overall_narrative": "Un tourbillon humoristique de 60 secondes qui revisite tes vidéos préférées : des maths de ouf, des sketches de couple, des animés, de la bouffe et des défis improbables. Tu vas rire, apprendre et te dire 'mais c'est trop vrai'."
+    "overall_narrative": "Une exploration ludique et visuelle d'un concept mathématique contre-intuitif — le pliage exponentiel — qui révèle comment une simple feuille de papier peut atteindre la Lune en seulement 42 pliages. Mêlant humour et vulgarisation, ce short transforme une curiosité mathématique en une aventure vertigineuse, sur un ton dynamique et accessible."
   },
-  "run_id": "baseline_20261030_233212_73152266",
+  "run_id": "baseline_20261030_234731_1896cb67",
   "pipeline_log": [
-    "[BASELINE] Single-agent run started. run_id=baseline_20261030_233212_73152266.",
-    "[BASELINE] Storyboard generated: 'Le Grand Mix de ton Historique YouTube 🤯'."
+    "[BASELINE] Single-agent run started. run_id=baseline_20261030_234731_1896cb67.",
+    "[BASELINE] Storyboard generated: 'Le paradoxe mathématique qui rend fou (et que tu utilises tous les jours)'."
   ]
 }
