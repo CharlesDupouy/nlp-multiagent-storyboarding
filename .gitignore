@@ -1,0 +1,27 @@
+# .gitignore
+
+# Environment & secrets
+.env
+*.local.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Outputs (storyboards can be large; commit selectively)
+outputs/
+
+# Data (may contain personal info)
+data/user_histories/*.json
+!data/user_histories/example.json
+
+# Editor
+.vscode/
+.idea/
+*.swp

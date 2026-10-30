@@ -1,0 +1,154 @@
+\documentclass[11pt]{article}
+\usepackage[margin=0.8in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{amsmath}
+
+\definecolor{hkustblue}{HTML}{003B71}
+\definecolor{llmred}{HTML}{E5482B}
+\definecolor{softgray}{HTML}{F4F4F2}
+\hypersetup{colorlinks=true,linkcolor=hkustblue,urlcolor=hkustblue,citecolor=hkustblue}
+\titleformat{\section}{\large\bfseries\color{llmred}}{}{0pt}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{hkustblue}}{}{0pt}{}
+\setlist[itemize]{leftmargin=1.4em,itemsep=2pt,topsep=3pt}
+\setlist[enumerate]{leftmargin=1.7em,itemsep=2pt,topsep=3pt}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{COMP 4221 --- Intro to NLP}
+\rhead{Fall 2026}
+\cfoot{\thepage}
+\setlength{\headheight}{14pt}
+
+\newcommand{\course}{COMP 4221: Intro to NLP}
+\newcommand{\instructor}{Prof. Yi R. (May) Fung}
+
+\begin{document}
+
+\begin{center}
+  {\Large\bfseries\color{llmred} LLM Course Project}\\[5pt]
+  {\large \course}\\[3pt]
+  Fall 2026 \quad $\cdot$ \quad \instructor\\[8pt]
+  \colorbox{softgray}{\parbox{0.92\linewidth}{\centering
+  \textbf{}\\
+  Form teams of two or three}}
+\end{center}
+
+\section{Purpose}
+
+The capstone asks you to build and evaluate an LLM method, system, or analysis around one testable question. The goal is not to assemble the largest model or spend the most compute. The goal is to make a careful claim, compare against a meaningful baseline, and produce evidence that another team could reproduce. You may use open-weight models, APIs, retrieval systems, tools, parameter-efficient tuning, or compact locally runnable models. Projects that reveal a limitation or negative result through strong evaluation are welcome.
+
+\section{Choose a project track}
+
+\begin{enumerate}
+  \item \textbf{Model adaptation or learning.} Study prompting, supervised fine-tuning, preference optimization, distillation, synthetic data, reasoning, efficiency, or another adaptation method.
+  \item \textbf{LLM systems and agents.} Build and evaluate a retrieval, tool-use, multi-agent, multimodal, or workflow system on realistic tasks.
+  \item \textbf{Evaluation, reliability, or safety.} Design a benchmark or analysis of factuality, robustness, calibration, bias, privacy, security, interpretability, or human-AI interaction.
+\end{enumerate}
+
+Other directions are welcome when the project has a clear connection to large language models and an evaluation plan that fits the available time and resources.
+
+\section{Minimum technical expectations}
+
+Every project must include:
+
+\begin{itemize}
+  \item a precise research question or success criterion;
+  \item at least one non-trivial baseline and one controlled comparison, ablation, or counterfactual;
+  \item a documented dataset or task suite with a train/development/test separation when applicable;
+  \item justified automatic metrics plus qualitative inspection; human evaluation when the claim requires it;
+  \item saved prompts, configurations, model/API versions, seeds, and evaluation code;
+  \item a cost and compute statement, failure analysis, limitations, and responsible-use discussion.
+\end{itemize}
+
+\section{Milestones and grading}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}p{0.16\linewidth}p{0.20\linewidth}Xr@{}}
+\toprule
+\textbf{Date} & \textbf{Deliverable} & \textbf{What to submit} & \textbf{Course grade}\\
+\midrule
+Sep. 24 & Team registration & Team members & --\\
+Oct. 9 & Project proposal & 1--2 pages; question, related work, baseline, resources, and evaluation plan & 2\%\\
+Nov. 24--26 & Live presentation / demo & Problem, system or method, controlled evidence, failure case, and takeaway & 4\%\\
+Dec. 4 & Final submission & 6--8 page report, code and reproducibility package, contribution statement & 14\%\\
+\midrule
+ & & \textbf{Deliverable total} & \textbf{20\%}\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Proposal: make the comparison explicit}
+
+Use the following headings:
+
+\begin{itemize}
+  \item \textbf{Problem and motivation:} What capability, limitation, or application will you investigate?
+  \item \textbf{Related work:} What are the closest methods, systems, and evaluation practices?
+  \item \textbf{Data or tasks:} Which inputs, benchmarks, users, or workflows will be studied?
+  \item \textbf{Method and baseline:} What will you change, and what is the controlled comparison?
+  \item \textbf{Evaluation:} Which metrics and examples could support or falsify the claim?
+  \item \textbf{Resources and risks:} Which models, APIs, tools, compute, data licenses, and costs are expected?
+  \item \textbf{Work plan:} What is the minimum viable pipeline, and who owns each part?
+\end{itemize}
+
+\section{Final report and reproducibility package}
+
+The final report should read like a short ML/NLP conference paper and use the included report template. The 6--8 page limit excludes references and appendices. Include:
+
+\begin{enumerate}
+  \item abstract and introduction;
+  \item background and related work;
+  \item task, data, models, and resource assumptions;
+  \item method or system design;
+  \item evaluation setup, results, and controlled comparisons;
+  \item failure analysis, limitations, responsible use, and conclusion.
+\end{enumerate}
+
+Submit one PDF and one clean code archive per team. The archive should include a README, dependency lock or requirements file, prompts and configurations, evaluation code, and commands to reproduce the principal results. Do not include API keys, private data, model checkpoints, caches, or unrelated dependency source code.
+
+For API-based projects, record provider, model name, access date, decoding parameters, and estimated cost. For local models, report the exact model revision, quantization or adaptation settings, hardware, and runtime. A reviewer should be able to understand what was run even if an external model later changes.
+
+\section{How the final work is judged}
+
+The final report and reproducibility package are assessed using the following rubric. The live presentation/demo is graded separately.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}Xrp{0.58\linewidth}@{}}
+\toprule
+\textbf{Criterion} & \textbf{Share} & \textbf{What strong work demonstrates}\\
+\midrule
+Problem and positioning & 15\% & A focused, worthwhile question and accurate relationship to relevant work.\\
+Technical depth & 25\% & Correct implementation, justified design choices, and substantial work beyond connecting an API.\\
+Experimental design & 25\% & Fair baselines, controlled comparisons, suitable metrics, and credible task construction.\\
+Analysis and reliability & 20\% & Failure cases, uncertainty, limitations, and conclusions calibrated to the evidence.\\
+Reproducibility and communication & 15\% & Clear writing and figures, complete citations, documented model versions, and runnable code.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Collaboration, attribution, and responsible use}
+
+Each report must state every member's contribution. Normally, team members receive the same mark; individual marks may differ when documented contributions differ substantially. Reuse of work submitted to another course or project must be disclosed in advance, and only the new work completed for COMP 4221 will be assessed.
+
+Public papers, code, models, datasets, and AI tools may be used when licenses permit and sources are cited. You remain responsible for checking generated code, claims, and references. Do not copy another team's code or report. Never publish credentials. Projects that interact with real users, personal data, external accounts, or consequential tools must be discussed with the instructor before data collection or deployment.
+
+\section{A practical test for a good LLM project}
+
+Complete this sentence:
+
+\begin{quote}
+\emph{On \underline{\hspace{2.6cm}}, our change \underline{\hspace{3.0cm}} should improve or reveal \underline{\hspace{2.8cm}} relative to \underline{\hspace{2.6cm}}, measured by \underline{\hspace{2.8cm}} under a budget of \underline{\hspace{2.2cm}}.}
+\end{quote}
+
+If the baseline, measurement, or budget is vague, narrow the project before increasing model scale.
+
+
+\end{document}

@@ -1,0 +1,33 @@
+# Multi-Agent Storyboarding — Configuration
+# Copy this file to configs/config.local.yaml for local overrides.
+# Never commit API keys — use environment variables instead.
+
+llm:
+  # DeepSeek-compatible base URL (OpenAI-compatible API)
+  base_url: "https://api.deepseek.com"
+  # api_key: set via DEEPSEEK_API_KEY environment variable
+
+models:
+  # Model for ProfilerAgent (fast, low-cost — profiling is straightforward)
+  profiler: "deepseek-chat"
+
+  # Model for NewsRetrieverAgent (fast — mostly formatting retrieved text)
+  retriever: "deepseek-chat"
+
+  # Model for ImageSearchAgent (fast — keyword extraction only)
+  image_search: "deepseek-chat"
+
+  # Model for ScriptwriterAgent (best available — creative writing task)
+  scriptwriter: "deepseek-chat"
+  # Switch to "deepseek-reasoner" for higher quality at higher cost
+
+baseline:
+  # Model for the single-agent baseline (same model = fair comparison)
+  model: "deepseek-chat"
+
+pipeline:
+  target_duration_seconds: 60   # target short video length
+  max_news_results: 5           # results per search query
+  images_per_theme: 2           # images per user theme
+
+output_dir: "outputs/storyboards"

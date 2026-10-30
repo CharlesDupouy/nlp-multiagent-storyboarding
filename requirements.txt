@@ -1,0 +1,20 @@
+# requirements.txt
+# Pin versions once the project stabilises; these are starting points.
+
+# LLM client (OpenAI-compatible — works with DeepSeek)
+openai>=1.30.0
+
+# Config parsing
+pyyaml>=6.0
+
+# HTTP requests (for tool API calls)
+requests>=2.31.0
+
+# Data handling
+python-dotenv>=1.0.0   # load .env files for local development
+
+# Testing
+pytest>=8.0.0
+
+# Optional: nicer CLI output
+rich>=13.0.0

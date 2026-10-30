@@ -1,0 +1,68 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.72in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\definecolor{llmred}{HTML}{E5482B}
+\hypersetup{colorlinks=true,urlcolor=llmred,citecolor=llmred}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+\title{\vspace{-1.5em}\textbf{Your LLM Capstone Title}}
+\author{Student Name (Student ID) \and Student Name (Student ID)}
+\date{COMP 4901B Large Language Models --- Fall 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+In no more than 250 words, state the question, method or system, tasks, controlled comparison, principal result, and conclusion. Replace all instructional text before submission.
+\end{abstract}
+
+\section{Introduction}
+Define the capability, limitation, or application being studied. State the testable claim, summarize the approach, and list the main findings or contributions.
+
+\section{Related Work}
+Position the project against the closest LLM methods, systems, and evaluations. Cite reused models, prompts, datasets, tools, code, and judge models.
+
+\section{Tasks, Data, and Models}
+Describe task construction, data provenance and splits, model or API versions, access dates, licenses, and relevant limitations.
+
+\section{Method or System Design}
+Describe the intervention precisely. Include the prompting, adaptation, retrieval, agent loop, training objective, or system architecture needed to reproduce it. Identify what is reused and what the team implemented.
+
+\section{Experimental Setup}
+Specify baselines, controlled comparisons, metrics, judge setup, decoding parameters, seeds, compute, cost, and stopping rules. Explain how the evaluation could falsify the main claim.
+
+\section{Results}
+Report the main comparisons in tables or figures. Include uncertainty or repeated-run variation where appropriate. Interpret each central result.
+
+\section{Analysis and Failure Cases}
+Present qualitative examples, ablations, reliability checks, and at least one informative failure. Explain when and why the approach succeeds or fails.
+
+\section{Limitations and Responsible Use}
+Discuss external-validity limits, model or dataset bias, privacy and security concerns, dependence on changing APIs, and possible misuse.
+
+\section{Conclusion}
+Answer the research question using the evidence presented. Distinguish what the results show from what remains conjecture.
+
+\section*{Team Contributions and Use of AI Tools}
+List each member's contributions and approximate percentage. Disclose material use of generative AI or other automated tools for coding, experiment design, analysis, or writing, and describe verification.
+
+\section*{Reproducibility and Resource Statement}
+Give the main reproduction command, dependency and model versions, expected runtime, hardware, API requirements, estimated cost, and any resources that cannot be redistributed.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\appendix
+\section{Prompts, Additional Results, and Implementation Details}
+Optional material may appear here. The appendix and references do not count toward the 6--8 page main-text limit.
+
+\end{document}
