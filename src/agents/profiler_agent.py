@@ -91,21 +91,19 @@ def _parse_profile_response(raw: str) -> dict:
 
 
 _PROFILER_SYSTEM_PROMPT = """\
-You are an expert analyst of intellectual curiosity and user interests.
-Given a list of YouTube Shorts video titles and URLs, identify what this user genuinely wants to learn about, understand, or explore.
+You are an analyst of user tastes and curiosity.
+Given a list of YouTube Shorts video titles and URLs, determine what topics, subcultures, and curiosities make this user tick.
 
 Focus on:
-- Underlying subjects of curiosity (e.g. historical mechanisms, mathematics, technical skills, science, language, craft techniques, culture).
-- The depth of concepts they engage with.
-- An informative, curiosity-driven lens rather than superficial entertainment.
+- What themes, crafts, pop-culture domains, or real-world subjects fascinate them.
+- What kinds of intriguing real-world stories, shocking facts, or obscure details would hook them.
+- Remember: the goal is NOT to give them a school lesson, but to fuel an entertaining, fast-paced story with real, surprising external facts.
 
 Return ONLY valid JSON with the following keys:
 {
-  "interests": ["list", "of", "specific", "intellectual", "or", "skill-based", "topics"],
-  "themes":    ["broader", "educational", "or", "cultural", "themes"],
-  "preferred_style": "informative",
-  "raw_summary": "2-3 sentences synthesizing this user's curiosity profile and the kinds of insightful, informative breakdowns they would appreciate."
+  "interests": ["list", "of", "specific", "passions", "and", "curiosities"],
+  "themes":    ["broader", "lifestyle", "cultural", "or", "maker", "themes"],
+  "preferred_style": "infotainment",
+  "raw_summary": "2-3 sentences capturing what kind of mindblowing real-world stories or surprising angles would genuinely captivate this viewer."
 }
-
-Be specific and substantive. Avoid superficial labels like 'comedy' or 'funny videos' when there is an underlying topic (e.g. language nuances, social observation, logic puzzles).
 """

@@ -123,14 +123,14 @@ def _parse_scene_queries(raw: str, num_scenes: int) -> list[dict[str, Any]]:
 
 
 _IMAGE_QUERY_SYSTEM_PROMPT = """\
-You are an archival visual researcher and documentary director for educational short-form videos.
-Your task is to analyze storyboard scenes and formulate specific, documentary-grade visual search queries
-to find clear photographic evidence, authentic demonstrations, or informative diagrams.
+You are a visual director for entertaining, high-impact short videos.
+Your task is to analyze storyboard scenes and formulate specific visual search queries
+to find real-world photography, iconic imagery, authentic objects, or dramatic archival footage that brings the story to life.
 
 Guidelines:
-- Create 1 high-clarity search query for each scene.
-- Describe physical objects, real tools, authentic environments, diagrams, or precise technical actions (e.g. "electron microscope crystal lattice", "hands tuning acoustic guitar pegs close-up", "ancient manuscript mathematical diagram").
-- Avoid generic stock clichés, staged meme poses, or cartoonish graphics.
+- Create 1 vivid, realistic search query for each scene.
+- Target real places, authentic objects, dramatic real-world moments, or striking close-ups (e.g. "Wikipedia servers datacenter glowing", "vintage Daft Punk helmets studio neon", "ancient Greek pottery symposium").
+- Avoid sterile generic stock photos or fake staged business handshakes.
 - Keep each query concise (3 to 6 descriptive words).
 
 Return ONLY valid JSON in this format:
@@ -138,11 +138,11 @@ Return ONLY valid JSON in this format:
   "scene_queries": [
     {
       "scene_id": 1,
-      "query": "flaky pastry dough lamination layers close-up"
+      "query": "vintage daft punk helmets studio neon"
     },
     {
       "scene_id": 2,
-      "query": "paris street crepe stand steam"
+      "query": "giant server room blinking lights"
     }
   ]
 }

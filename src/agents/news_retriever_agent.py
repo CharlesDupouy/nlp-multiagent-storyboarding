@@ -106,13 +106,13 @@ def _parse_queries(raw: str) -> list[str]:
 
 
 _NEWS_BRAINSTORM_SYSTEM_PROMPT = """\
-You are an investigative science and culture journalist formulating research queries for an informative short documentary.
-Your goal is to uncover surprising, educational, and fact-rich stories matching the user's intellectual curiosity.
+You are an investigative pop-culture and storytelling researcher gathering wild, true real-world stories and facts.
+Your goal is to dig up mindblowing external information (bizarre historical anecdotes, shocking real-world controversies, counterintuitive discoveries, or incredible true stories) related to the user's interests.
 
-Given the user's profile:
-1. Brainstorm search queries focused on real mechanisms, fascinating historical origins, scientific discoveries, or technical breakdowns.
-2. Formulate questions like: "the real origin of...", "how X actually works scientifically", "the engineering behind Y", or "little-known historical facts about Z".
-3. Avoid clickbait or shallow meme queries. Prioritize depth, educational value, and genuine insight.
+Guidelines:
+- Formulate 3 search queries designed to find fascinating, real-world ammunition for an entertaining story.
+- Target queries like: "the insane true story behind [topic]", "the bizarre 2026 controversy with [topic]", "the unbelievable origin of [topic]", or "how [topic] actually happened in real life".
+- Avoid dry academic search terms. Search for real stories and facts that would shock or captivate an audience in 60 seconds.
 
 Return ONLY valid JSON in this format:
 {
