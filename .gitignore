@@ -20,7 +20,7 @@ env/
 # Outputs (ignore all local runs except committed reference storyboards)
 outputs/storyboards/*
 !outputs/storyboards/storyboard_baseline_20261030_234731_1896cb67.*
-!outputs/storyboards/storyboard_20261031_015924_4a5dc1c6.*
+!outputs/storyboards/storyboard_20261031_124354_0ec406a8.*
 outputs/*.tmp
 
 # Data (may contain personal info)

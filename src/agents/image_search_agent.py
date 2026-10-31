@@ -3,16 +3,19 @@ ImageSearchAgent — Agent in the pipeline illustrating the draft storyboard.
 
 Responsibility:
   - Takes the drafted storyboard (scenes, visual descriptions).
-  - Uses an LLM to analyze what visual stock photography would best illustrate each scene.
-  - Searches for candidate images using external tools (Unsplash/Pexels) based on keywords.
+  - Phase 1: Formulates tangible, concrete physical queries (primary & fallback)
+    avoiding cinematography jargon that breaks stock search.
+  - Phase 2: Retrieves multiple candidate stock photos per scene from Unsplash/Pexels.
+  - Phase 3 (Art Director Pass): Inspects candidate descriptions and selects the
+    most visually faithful and representative image for each scene.
   - Formats results with discrete identifiers (img1, img2, ...) so the downstream
     scriptwriter refinement phase can reference images cleanly without handling raw URLs.
 
 Tool used:
-  - src/tools/image_tool.py  (wraps keyword image search API)
+  - src/tools/image_tool.py (wraps keyword search & candidate retrieval)
 
 Output written to state:
-  - state.image_context  (ImageContext dataclass with image_id mapping)
+  - state.image_context (ImageContext dataclass with image_id mapping)
 """
 
 from __future__ import annotations
@@ -24,85 +27,153 @@ from openai import OpenAI
 from src.agents.base_agent import BaseAgent
 from src.core.llm_client import chat_completion
 from src.core.state import ImageContext, SharedState
-from src.tools.image_tool import search_images
+from src.tools.image_tool import search_image_candidates
 
 
 class ImageSearchAgent(BaseAgent):
     """
     Finds visual imagery tailored specifically to scenes in a drafted storyboard.
-    Assigns symbolic IDs (img1, img2, ...) to prevent URL hallucination.
+    Uses candidate retrieval and an Art Director semantic selection pass
+    to ensure chosen images are representative and relevant.
     """
 
-    def __init__(self, model: str, client: OpenAI, max_images_per_scene: int = 1) -> None:
+    def __init__(self, model: str, client: OpenAI, candidates_per_scene: int = 4) -> None:
         super().__init__(name="ImageSearchAgent", model=model, client=client)
-        self.max_images_per_scene = max_images_per_scene
+        self.candidates_per_scene = candidates_per_scene
 
     def run(self, state: SharedState) -> SharedState:
-        self._log(state, "Analyzing draft storyboard to formulate visual image queries.")
+        self._log(state, "Analyzing draft storyboard to formulate physical visual queries.")
 
         scenes = state.storyboard.scenes
         if not scenes:
             self._log(state, "No scenes found in storyboard. Skipping image search.")
             return state
 
-        # 1. Format draft scenes for LLM query formulation
+        # -------------------------------------------------------------------
+        # 1. Query Formulation Pass: Concrete physical nouns only
+        # -------------------------------------------------------------------
         scene_descriptions = "\n".join(
             f"Scene {s.get('scene_id', idx + 1)}: {s.get('description', '')} (Subtitle: '{s.get('subtitle', '')}')"
             for idx, s in enumerate(scenes)
         )
 
-        user_prompt = f"""\
+        user_prompt_queries = f"""\
 STORYBOARD TITLE: {state.storyboard.title}
 OVERALL NARRATIVE: {state.storyboard.overall_narrative}
 
 DRAFT SCENES:
 {scene_descriptions}
 
-For each scene, formulate a clear, descriptive visual search query (1 query per scene) to find stock photography or background footage.
+Formulate concrete visual search queries for stock photography libraries (Unsplash).
+Remember: stock search engines match physical objects and places, NOT camera angles or editing techniques.
 """
-        raw_response = chat_completion(
+        raw_queries = chat_completion(
             client=self.client,
             model=self.model,
             system_prompt=_IMAGE_QUERY_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            temperature=0.5,
-            max_tokens=600,
+            user_prompt=user_prompt_queries,
+            temperature=0.3,
+            max_tokens=800,
         )
 
-        scene_queries = _parse_scene_queries(raw_response, len(scenes))
-        self._log(state, f"Formulated {len(scene_queries)} visual scene search queries.")
+        scene_queries = _parse_scene_queries(raw_queries, len(scenes))
+        self._log(state, f"Formulated {len(scene_queries)} physical visual queries.")
 
-        # 2. Search for images and assign discrete IDs (img1, img2, ...)
-        all_images: list[dict[str, Any]] = []
-        img_counter = 1
-
+        # -------------------------------------------------------------------
+        # 2. Tool Candidate Retrieval Pass: Fetch candidate photos per scene
+        # -------------------------------------------------------------------
+        scene_candidates_map: dict[int, list[dict[str, Any]]] = {}
         for item in scene_queries:
             scene_id = item.get("scene_id")
-            query = item.get("query", "")
-            if not query:
+            primary_q = item.get("primary_query") or item.get("query", "")
+            fallback_q = item.get("fallback_query", "")
+
+            candidates = search_image_candidates(
+                query=primary_q,
+                fallback_query=fallback_q,
+                max_results=self.candidates_per_scene,
+            )
+            scene_candidates_map[scene_id] = candidates
+            self._log(
+                state,
+                f"Scene {scene_id} [{primary_q}]: Retrieved {len(candidates)} photo candidates."
+            )
+
+        # -------------------------------------------------------------------
+        # 3. Art Director Selection Pass: Pick most representative candidate
+        # -------------------------------------------------------------------
+        self._log(state, "Art Director evaluating candidates to select the most representative photos.")
+        art_director_prompt = _build_art_director_prompt(scenes, scene_candidates_map)
+
+        raw_selection = chat_completion(
+            client=self.client,
+            model=self.model,
+            system_prompt=_ART_DIRECTOR_SYSTEM_PROMPT,
+            user_prompt=art_director_prompt,
+            temperature=0.2,
+            max_tokens=1000,
+        )
+
+        selections = _parse_art_director_selections(raw_selection)
+
+        # -------------------------------------------------------------------
+        # 4. Catalog final images with discrete symbolic IDs (img1, img2, ...)
+        # -------------------------------------------------------------------
+        all_images: list[dict[str, Any]] = []
+        for idx, scene in enumerate(scenes):
+            scene_id = scene.get("scene_id", idx + 1)
+            candidates = scene_candidates_map.get(scene_id, [])
+            if not candidates:
                 continue
 
-            self._log(state, f"Searching imagery for Scene {scene_id}: '{query}'")
-            results = search_images(query=query, max_results=self.max_images_per_scene)
-            for res in results:
-                image_id = f"img{img_counter}"
-                all_images.append({
-                    "image_id": image_id,
-                    "target_scene_id": scene_id,
-                    "query": query,
-                    "url": res.get("url", ""),
-                    "alt_text": res.get("alt_text", f"Image for {query}"),
-                })
-                img_counter += 1
+            # Find selected candidate ID or default to first
+            chosen_cand_id = selections.get(scene_id, "cand1")
+            chosen_cand = next((c for c in candidates if c.get("candidate_id") == chosen_cand_id), candidates[0])
+
+            image_id = f"img{idx + 1}"
+            all_images.append({
+                "image_id": image_id,
+                "target_scene_id": scene_id,
+                "query": scene_queries[idx].get("primary_query", "") if idx < len(scene_queries) else "",
+                "url": chosen_cand.get("url", ""),
+                "alt_text": chosen_cand.get("alt_text", ""),
+                "description": chosen_cand.get("description", ""),
+            })
+            self._log(
+                state,
+                f"  -> Assigned [{image_id}] for Scene {scene_id}: \"{chosen_cand.get('description')}\""
+            )
 
         state.image_context = ImageContext(images=all_images)
-        self._log(state, f"Retrieved {len(all_images)} candidate images with discrete IDs (img1 to img{len(all_images)}).")
+        self._log(state, f"Curated {len(all_images)} representative images cataloged (img1 to img{len(all_images)}).")
         return state
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Prompt Builders & Helpers
 # ---------------------------------------------------------------------------
+
+def _build_art_director_prompt(
+    scenes: list[dict[str, Any]],
+    scene_candidates: dict[int, list[dict[str, Any]]],
+) -> str:
+    blocks = []
+    for s in scenes:
+        sid = s.get("scene_id", 1)
+        desc = s.get("description", "")
+        cands = scene_candidates.get(sid, [])
+        cands_text = "\n".join(
+            f"  - [{c.get('candidate_id')}]: \"{c.get('description')}\""
+            for c in cands
+        ) or "  - No candidates available"
+
+        blocks.append(
+            f"SCENE {sid}:\n"
+            f"Desired Visual: {desc}\n"
+            f"Available Photo Candidates:\n{cands_text}"
+        )
+    return "\n\n".join(blocks)
+
 
 def _parse_scene_queries(raw: str, num_scenes: int) -> list[dict[str, Any]]:
     """Parse JSON mapping scenes to visual queries."""
@@ -117,32 +188,78 @@ def _parse_scene_queries(raw: str, num_scenes: int) -> list[dict[str, Any]]:
                     return data[k]
     except Exception:
         pass
+    return [
+        {
+            "scene_id": i + 1,
+            "primary_query": f"subject {i + 1}",
+            "fallback_query": "object",
+        }
+        for i in range(num_scenes)
+    ]
 
-    # Fallback: create generic visual queries if parsing fails
-    return [{"scene_id": i + 1, "query": f"scene visual {i + 1}"} for i in range(num_scenes)]
+
+def _parse_art_director_selections(raw: str) -> dict[int, str]:
+    """Parse JSON mapping scene_id -> selected candidate_id."""
+    selections: dict[int, str] = {}
+    try:
+        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = json.loads(cleaned)
+        items = data if isinstance(data, list) else data.get("selections", [])
+        for item in items:
+            sid = item.get("scene_id")
+            cid = item.get("selected_candidate_id")
+            if sid and cid:
+                selections[int(sid)] = str(cid)
+    except Exception:
+        pass
+    return selections
 
 
 _IMAGE_QUERY_SYSTEM_PROMPT = """\
-You are a visual director for entertaining, high-impact short videos.
-Your task is to analyze storyboard scenes and formulate specific visual search queries
-to find real-world photography, iconic imagery, authentic objects, or dramatic archival footage that brings the story to life.
+You are an expert Art Director formulating stock photo search queries for an external image database (Unsplash).
 
-Guidelines:
-- Create 1 vivid, realistic search query for each scene.
-- Target real places, authentic objects, dramatic real-world moments, or striking close-ups (e.g. "Wikipedia servers datacenter glowing", "vintage Daft Punk helmets studio neon", "ancient Greek pottery symposium").
-- Avoid sterile generic stock photos or fake staged business handshakes.
-- Keep each query concise (3 to 6 descriptive words).
+CRITICAL SEARCH ENGINE PRINCIPLES:
+1. Search engines match TANGIBLE PHYSICAL OBJECTS and REAL-WORLD SETTINGS (e.g., "multicolor ballpoint pen", "students in classroom", "vintage rotary phone", "newspaper on wooden table").
+2. STRICTLY FORBIDDEN: NEVER include video production directions or shot modifiers in the query.
+   - Do NOT include: "split screen", "exploded view", "macro", "closeup", "cinematic", "drone shot", "pov", "2000s", "vintage style".
+   - Do NOT include brand names (e.g. use "ballpoint pen", not "Bic").
+3. Each scene MUST have:
+   - "primary_query": 2 to 4 tangible visual nouns/adjectives describing the single main physical object or setting.
+   - "fallback_query": 1 to 2 word core physical noun (e.g. "ballpoint pen", "classroom", "telephone").
 
 Return ONLY valid JSON in this format:
 {
   "scene_queries": [
     {
       "scene_id": 1,
-      "query": "vintage daft punk helmets studio neon"
+      "primary_query": "multicolor click ballpoint pen",
+      "fallback_query": "ballpoint pen"
     },
     {
       "scene_id": 2,
-      "query": "giant server room blinking lights"
+      "primary_query": "school classroom children desks",
+      "fallback_query": "classroom"
+    }
+  ]
+}
+"""
+
+
+_ART_DIRECTOR_SYSTEM_PROMPT = """\
+You are an Art Director reviewing photographic image candidates for short-video scenes.
+For each scene, evaluate the candidate descriptions and select the SINGLE candidate that is most visually faithful and representative of what the scene describes.
+
+Guidelines:
+- Choose the candidate whose description actually depicts the requested physical subject (e.g. if the scene is about a pen, pick the pen, NOT a woman pointing or a basketball hoop).
+- If multiple candidates match, pick the most descriptive and aesthetically fitting one.
+
+Return ONLY valid JSON in this format:
+{
+  "selections": [
+    {
+      "scene_id": 1,
+      "selected_candidate_id": "cand2",
+      "reason": "Directly depicts a ballpoint click pen"
     }
   ]
 }

@@ -103,6 +103,24 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("highlight censorship documents", md)
 
 
+    def test_clean_stock_query(self):
+        from src.tools.image_tool import clean_stock_query
+        q = "teenage hand clicking Bic 4 color pen macro split screen"
+        cleaned = clean_stock_query(q)
+        self.assertNotIn("macro", cleaned)
+        self.assertNotIn("split screen", cleaned)
+        self.assertNotIn("Bic", cleaned)
+        self.assertIn("ballpoint", cleaned)
+        self.assertIn("pen", cleaned)
+
+    def test_parse_art_director_selections(self):
+        from src.agents.image_search_agent import _parse_art_director_selections
+        raw_json = '{"selections": [{"scene_id": 1, "selected_candidate_id": "cand2"}, {"scene_id": 2, "selected_candidate_id": "cand1"}]}'
+        res = _parse_art_director_selections(raw_json)
+        self.assertEqual(res.get(1), "cand2")
+        self.assertEqual(res.get(2), "cand1")
+
+
 if __name__ == "__main__":
     unittest.main()
 
