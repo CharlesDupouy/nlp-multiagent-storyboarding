@@ -31,7 +31,7 @@ from src.agents.news_retriever_agent import NewsRetrieverAgent
 from src.agents.pitch_agent import WritersRoomAgent
 from src.agents.profiler_agent import ProfilerAgent
 from src.agents.scriptwriter_agent import ScriptwriterAgent
-from src.core.llm_client import get_client
+from src.core.llm_client import get_client, reset_token_usage, get_token_usage, calculate_cost_usd
 from src.core.state import SharedState, UserHistory
 
 
@@ -104,6 +104,7 @@ class Orchestrator:
         Returns:
             The fully populated SharedState (with storyboard).
         """
+        reset_token_usage()
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
 
         # Initialise shared state
@@ -140,6 +141,12 @@ class Orchestrator:
         state.log("--- Phase 7: Storyboard Grounding & Refinement (ScriptwriterAgent - Refine Pass) ---")
         state = self.scriptwriter.refine(state)
 
+        # Audit token accounting
+        usage = get_token_usage()
+        cost = calculate_cost_usd(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+        state.token_usage = usage
+        state.estimated_cost_usd = cost
+        state.log(f"Token audit: {usage.get('prompt_tokens', 0):,} prompt + {usage.get('completion_tokens', 0):,} completion across {usage.get('total_calls', 0)} calls. Est. Cost: ${cost:.5f} USD.")
         state.log("Pipeline complete.")
 
         # Save output

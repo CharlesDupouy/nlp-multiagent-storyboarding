@@ -124,6 +124,8 @@ class SharedState:
     # --- METADATA ---
     run_id: str = ""
     pipeline_log: list[str] = field(default_factory=list)  # human-readable trace
+    token_usage: dict[str, int] = field(default_factory=dict)  # {"prompt_tokens": int, "completion_tokens": int, "total_calls": int}
+    estimated_cost_usd: float = 0.0  # cost in USD based on provider pricing
 
     def log(self, message: str) -> None:
         """Append a message to the pipeline trace log."""
@@ -138,9 +140,10 @@ class SharedState:
     def to_markdown(self) -> str:
         """Convert the storyboard into a human-readable Markdown format."""
         sb = self.storyboard
+        cost_str = f" | **Est. Cost:** `${self.estimated_cost_usd:.5f}`" if self.estimated_cost_usd else ""
         md_lines = [
             f"# {sb.title or 'Untitled Storyboard'}",
-            f"**Target Duration:** {sb.target_duration_seconds}s | **Run ID:** `{self.run_id}`\n",
+            f"**Target Duration:** {sb.target_duration_seconds}s | **Run ID:** `{self.run_id}`{cost_str}\n",
             f"## Narrative Arc",
             f"{sb.overall_narrative or 'No narrative summary provided.'}\n",
             f"## Scene Breakdown\n",

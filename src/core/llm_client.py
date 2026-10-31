@@ -20,6 +20,39 @@ try:
 except ImportError:
     pass
 
+# Global token accounting for reproducibility and cost auditing
+_TOKEN_USAGE = {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_calls": 0,
+}
+
+
+def get_token_usage() -> dict[str, int]:
+    """Return a copy of the current session's token usage."""
+    return dict(_TOKEN_USAGE)
+
+
+def reset_token_usage() -> None:
+    """Reset the session token usage counter to zero."""
+    _TOKEN_USAGE["prompt_tokens"] = 0
+    _TOKEN_USAGE["completion_tokens"] = 0
+    _TOKEN_USAGE["total_calls"] = 0
+
+
+def calculate_cost_usd(prompt_tokens: int, completion_tokens: int, provider: str = "deepseek") -> float:
+    """
+    Calculate estimated cost in USD based on provider pricing.
+    DeepSeek pricing (as of 2026):
+      - Cache miss input: $0.14 / 1M tokens
+      - Output tokens:     $0.28 / 1M tokens
+    """
+    if provider == "deepseek":
+        cost = (prompt_tokens * 0.14 + completion_tokens * 0.28) / 1_000_000.0
+        return round(cost, 6)
+    # Default fallback: approx GPT-4o-mini pricing ($0.15 / 1M in, $0.60 / 1M out)
+    return round((prompt_tokens * 0.15 + completion_tokens * 0.60) / 1_000_000.0, 6)
+
 
 def get_client(base_url: str | None = None, api_key: str | None = None) -> OpenAI:
     """
@@ -67,4 +100,11 @@ def chat_completion(
         max_tokens=max_tokens,
         **kwargs,
     )
+
+    # Accumulate token usage if returned by the API
+    if hasattr(response, "usage") and response.usage:
+        _TOKEN_USAGE["prompt_tokens"] += getattr(response.usage, "prompt_tokens", 0) or 0
+        _TOKEN_USAGE["completion_tokens"] += getattr(response.usage, "completion_tokens", 0) or 0
+        _TOKEN_USAGE["total_calls"] += 1
+
     return response.choices[0].message.content or ""

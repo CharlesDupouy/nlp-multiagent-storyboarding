@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from src.core.llm_client import chat_completion, get_client
+from src.core.llm_client import chat_completion, get_client, reset_token_usage, get_token_usage, calculate_cost_usd
 from src.core.state import SharedState, Storyboard, UserHistory
 
 
@@ -66,6 +66,7 @@ class SingleAgentBaseline:
 
         Same signature as Orchestrator.run() for easy swapping in evaluation.
         """
+        reset_token_usage()
         run_id = "baseline_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
         state = SharedState(
             user_history=UserHistory(videos=videos),
@@ -100,6 +101,12 @@ class SingleAgentBaseline:
             overall_narrative=storyboard_data.get("overall_narrative", ""),
         )
 
+        # Audit token accounting
+        usage = get_token_usage()
+        cost = calculate_cost_usd(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+        state.token_usage = usage
+        state.estimated_cost_usd = cost
+        state.log(f"[BASELINE] Token audit: {usage.get('prompt_tokens', 0):,} prompt + {usage.get('completion_tokens', 0):,} completion. Est. Cost: ${cost:.5f} USD.")
         state.log(f"[BASELINE] Storyboard generated: '{state.storyboard.title}'.")
         out_path = self.output_dir / f"storyboard_{run_id}.json"
         state.save(str(out_path))
