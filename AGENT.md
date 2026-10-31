@@ -27,25 +27,14 @@ Any AI agent or engineer editing this codebase **MUST strictly uphold the follow
 - Both systems **must return an instance of `SharedState`** (`src/core/state.py`).
 - Never introduce breaking changes to `SharedState` without updating both pipeline and baseline serializers.
 
-### Rule 2: Zero URL Hallucination (Symbolic Referencing)
-- **NEVER** instruct the scriptwriting LLM to invent or copy/paste raw image URLs.
-- The `ImageSearchAgent` catalogs candidate images as symbolic IDs (`img1`, `img2`, ...).
-- The `ScriptwriterAgent` assigns visual assets strictly using `"image_ref": "img1"`.
-- Real URLs are resolved programmatically in Python via `storyboard.resolve_image_urls(state.image_context)`.
+### Rule 2: Continuous Project Tracker Updates (Living Paper Trail)
+Whenever you introduce an architectural change, prompt revision, new tool, or run an evaluation/experiment, you **MUST update [`docs/project_tracker.md`](docs/project_tracker.md)**:
+- **Design Decisions Log:** Record the decision, rationale ("Why"), and alternatives considered (directly populates the paper's *Methodology* section).
+- **Cost & Compute Log:** Log the Run ID, model, token counts, and cost (feeds the *Reproducibility & Compute* statement).
+- **Error & Failure Case Studies:** Document any failure mode encountered, why it occurred, and how it was mitigated (critical for the paper's required *Error Analysis* section).
+- **Status & Milestones:** Check off completed items and update ownership.
 
-### Rule 3: Strict Scientific Fairness (No Strawman Baseline)
-- **Academic Integrity:** The single-agent baseline (`baseline/single_agent_baseline.py`) must remain **neutral, rigorous, and competitive**.
-- Never alter the baseline prompt to steer it toward funny, shitty, or clip-show mashups.
-- Both systems must be held to identical high standards of thematic focus, narrative arc, and visual descriptions.
-- The multi-agent system's advantage must arise purely from its architectural capabilities (spoken transcript inspection, Writers' Room deliberation, external fact retrieval, and visual asset curation), not from artificially crippling the baseline.
-
-### Rule 4: Data Privacy & Secret Hygiene
-- **NEVER** commit `.env` or personal participant data (`data/user_histories/*.json` except `example.json`) to git.
-- `.gitignore` is configured to allow only reference storyboards and `example.json`. Keep it that way.
-
-### Rule 5: Zero-Auth YouTube Tools
-- Video title resolution and transcript extraction (`src/tools/youtube_tool.py`) use **oEmbed** and **`youtube-transcript-api`**.
-- Do **NOT** introduce official Google Cloud YouTube Data API v3 keys or OAuth requirements. The current tool is keyless, zero-quota, and instant.
+*Goal:* Continuous logging ensures that all empirical evidence, ablation insights, and design justifications are pre-written and ready to synthesize into the final 6–8 page report (due Dec 4).
 
 ---
 
@@ -115,14 +104,3 @@ python3 evaluation/evaluator.py --compare outputs/storyboards/storyboard_ma.json
 # Run all unit tests
 python3 -m unittest discover tests
 ```
-
----
-
-## 6. Coding Standards & Conventions
-
-1. **Python Compatibility:** Python 3.10+ required. Always use `from __future__ import annotations`.
-2. **Type Annotations:** All functions and methods must have complete type hints.
-3. **Robust JSON Parsing:** Always use `_parse_json()` helpers that strip markdown code fences (````json ... ````) and handle edge cases gracefully with fallbacks.
-4. **Tool Graceful Degradation:** External tools (`news_tool`, `image_tool`) must check for API keys and gracefully fall back to synthetic mocks if keys are absent or if network requests fail.
-5. **No Blind Front-Truncation:** When simplifying search queries for external APIs, never blindly slice the first 3 words (`words[:3]`), because in English the critical subject noun is often at the end. Use noun-preserving sanitization (`clean_stock_query`).
-6. **Network / Sandboxing:** API calls (DeepSeek, NewsAPI, Unsplash, GitHub push) require network access. If running inside a restricted sandbox, ensure network bypass permissions are active.
