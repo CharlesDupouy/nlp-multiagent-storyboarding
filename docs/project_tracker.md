@@ -21,9 +21,9 @@
 | Multi-agent framework (core architecture) | Charles | 🟢 Writers' Room + Director + Targeted Retrieval complete & tested (v3.0) |
 | Prompt engineering & refinement | Charles | 🟢 v3.0 active (Adaptive user style + neutral baseline) |
 | Real API integration (news, images) | Charles | 🟢 100% Complete (NewsAPI + Unsplash + YouTube transcripts integrated & live) |
-| LLM-as-a-judge evaluator | Max | 🔲 Next up (`evaluation/evaluator.py`) |
-| Automated evaluation over dataset | Max | 🔲 TODO |
-| Demo sketch renderer (TTS + images) | Max | 🔲 TODO |
+| LLM-as-a-judge evaluator | Max | 🟢 Scaffolded, tested CLI & ready for batch evaluation (`evaluation/evaluator.py`) |
+| Automated evaluation over dataset | Max | 🔲 In progress (pending Antoine's peer history batch) |
+| Demo sketch renderer (TTS + images) | Max | 🔲 TODO (stretch goal) |
 
 ---
 
