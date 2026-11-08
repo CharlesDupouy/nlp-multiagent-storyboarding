@@ -1,0 +1,4 @@
+{"type": "abs", "user": "user_51107a60", "system": "baseline", "run": 0, "scores": {"relevance": {"score": 3, "reasoning": "stub"}, "creativity": {"score": 3, "reasoning": "stub"}, "completeness": {"score": 3, "reasoning": "stub"}, "coherence": {"score": 1, "reasoning": "stub"}}}
+{"type": "abs", "user": "user_51107a60", "system": "agentic", "run": 0, "scores": {"relevance": {"score": 2, "reasoning": "stub"}, "creativity": {"score": 1, "reasoning": "stub"}, "completeness": {"score": 4, "reasoning": "stub"}, "coherence": {"score": 3, "reasoning": "stub"}}}
+{"type": "pair", "user": "user_51107a60", "run": 0, "order": "AB", "winner": "agentic", "reasoning": "stub"}
+{"type": "pair", "user": "user_51107a60", "run": 0, "order": "BA", "winner": "tie", "reasoning": "stub"}

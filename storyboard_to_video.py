@@ -316,7 +316,7 @@ def build_scene_clip(scene, idx, tmp, tts, size, args):
 def main():
     ap = argparse.ArgumentParser(description="Storyboard JSON -> slideshow video with TTS")
     ap.add_argument("storyboard", help="path to the storyboard JSON")
-    ap.add_argument("-o", "--output", default="output.mp4")
+    ap.add_argument("-o", "--output", default="outputs/video/output.mp4")
     ap.add_argument("--lang", default="fr", help="TTS language code (default: fr)")
     ap.add_argument("--rate", type=int, default=170, help="TTS speaking rate (words/min)")
     ap.add_argument("--width", type=int, default=1280)

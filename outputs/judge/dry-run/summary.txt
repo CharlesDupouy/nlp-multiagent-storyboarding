@@ -1,0 +1,25 @@
+!! Only 1 user(s): CIs and p-values are not meaningful below ~10 users. Treat these numbers as a pilot / qualitative signal.
+
+==========================================================================
+ABSOLUTE SCORES (1-5), n_users = 1
+==========================================================================
+metric          agentic  baseline   delta       95% CI (boot)  wilcoxon p
+relevance          2.00      3.00   -1.00        [+nan, +nan]         n/a
+creativity         1.00      3.00   -2.00        [+nan, +nan]         n/a
+completeness       4.00      3.00   +1.00        [+nan, +nan]         n/a
+coherence          3.00      1.00   +2.00        [+nan, +nan]         n/a
+
+==========================================================================
+PAIRWISE PREFERENCE (both orders judged)
+==========================================================================
+Votes: agentic 1 | baseline 0 | tie 1
+Agentic win rate (excluding ties): 100.0%
+Sign test p-value: 1.0000
+Position consistency (same verdict in both orders): 0.0%  <- low values mean the pairwise verdicts are unreliable
+Per-user majority: agentic 1 | baseline 0 | tie 0
+
+==========================================================================
+LENGTH CHECK (verbosity-bias diagnostic)
+==========================================================================
+agentic    mean words in judged text: 480
+baseline   mean words in judged text: 522

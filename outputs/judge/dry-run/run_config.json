@@ -1,0 +1,34 @@
+{
+  "timestamp_utc": "2026-11-08T08:44:32+00:00",
+  "provider": "openai",
+  "model": "dry-run",
+  "base_url": "https://api.deepseek.com",
+  "temperature": 0.0,
+  "runs": 1,
+  "max_history": 150,
+  "users": {
+    "user_51107a60": {
+      "agentic_run": "20261031_124354_0ec406a8",
+      "baseline_run": "baseline_20261030_234731_1896cb67"
+    }
+  },
+  "token_usage_this_invocation": {
+    "in": 0,
+    "out": 0,
+    "calls": 0
+  },
+  "estimated_cost_usd": null,
+  "failures": 0,
+  "prompts": {
+    "abs_system": "You are a strict, impartial evaluator of short-video storyboards. Use the full range of the scales and avoid defaulting to middle or high scores. Do NOT reward length or verbosity; judge quality only. Do not guess which system produced the storyboard.",
+    "pair_system": "You are a strict, impartial evaluator comparing two short-video storyboards written for the same user. Do NOT reward length or verbosity. The order in which the storyboards are shown carries no information.",
+    "rubric": {
+      "relevance": "How well the storyboard fits THIS user's specific interests, as evidenced by their watch history.\n1 = unrelated to the user's interests.\n2 = loosely related to a broad interest category only.\n3 = touches an interest evident in the history but in a generic way any fan could get.\n4 = clearly built on specific interests visible in the history.\n5 = builds on specific niche interests and recurring patterns in the history in a way a generic video would not.",
+      "creativity": "Novelty and freshness of the concept, angle, and execution, while still suiting the user.\n1 = generic template; the most obvious video on the topic.\n2 = mostly conventional with minor variation.\n3 = some original touches but a predictable structure.\n4 = a distinctive angle or structure that feels fresh.\n5 = surprising, memorable concept that still clearly fits the user.",
+      "completeness": "Whether the storyboard fully specifies a producible short video: scene descriptions, subtitles, AND audio cues.\n1 = major components missing or only a vague outline.\n2 = several scenes lack subtitles or audio, or key details are missing.\n3 = all components present but thin or uneven.\n4 = complete and specific, minor gaps.\n5 = fully specified for every scene (visuals, subtitles, audio), ready to produce.",
+      "coherence": "Narrative flow and consistency: do scenes, subtitles and audio fit together as one watchable short with a hook and a payoff?\n1 = disjointed or contradictory.\n2 = weak flow; scenes feel unconnected.\n3 = understandable but with a flat or unclear arc.\n4 = good flow with a clear hook and ending.\n5 = tight, engaging arc; every element supports the whole."
+    },
+    "abs_template": "Evaluate the storyboard below for the given user.\n\n<user_watch_history>\nTitles of YouTube Shorts this user recently watched:\n{history}\n</user_watch_history>\n\n<storyboard>\n{storyboard}\n</storyboard>\n\nScore the storyboard on each criterion from 1 to 5 using these anchored scales:\n\n### relevance\nHow well the storyboard fits THIS user's specific interests, as evidenced by their watch history.\n1 = unrelated to the user's interests.\n2 = loosely related to a broad interest category only.\n3 = touches an interest evident in the history but in a generic way any fan could get.\n4 = clearly built on specific interests visible in the history.\n5 = builds on specific niche interests and recurring patterns in the history in a way a generic video would not.\n\n### creativity\nNovelty and freshness of the concept, angle, and execution, while still suiting the user.\n1 = generic template; the most obvious video on the topic.\n2 = mostly conventional with minor variation.\n3 = some original touches but a predictable structure.\n4 = a distinctive angle or structure that feels fresh.\n5 = surprising, memorable concept that still clearly fits the user.\n\n### completeness\nWhether the storyboard fully specifies a producible short video: scene descriptions, subtitles, AND audio cues.\n1 = major components missing or only a vague outline.\n2 = several scenes lack subtitles or audio, or key details are missing.\n3 = all components present but thin or uneven.\n4 = complete and specific, minor gaps.\n5 = fully specified for every scene (visuals, subtitles, audio), ready to produce.\n\n### coherence\nNarrative flow and consistency: do scenes, subtitles and audio fit together as one watchable short with a hook and a payoff?\n1 = disjointed or contradictory.\n2 = weak flow; scenes feel unconnected.\n3 = understandable but with a flat or unclear arc.\n4 = good flow with a clear hook and ending.\n5 = tight, engaging arc; every element supports the whole.\n\nFor each criterion, write 1-2 sentences of reasoning FIRST, then give the score.\nReturn ONLY valid JSON, no markdown fences, in this form:\n{\"relevance\": {\"reasoning\": \"...\", \"score\": <1-5 integer>}, \"creativity\": {\"reasoning\": \"...\", \"score\": <1-5 integer>}, \"completeness\": {\"reasoning\": \"...\", \"score\": <1-5 integer>}, \"coherence\": {\"reasoning\": \"...\", \"score\": <1-5 integer>}}",
+    "pair_template": "Two short-video storyboards were generated for the same user.\n\n<user_watch_history>\nTitles of YouTube Shorts this user recently watched:\n{history}\n</user_watch_history>\n\n<storyboard_A>\n{storyboard_A}\n</storyboard_A>\n\n<storyboard_B>\n{storyboard_B}\n</storyboard_B>\n\nQuestion: which video would this specific user prefer to watch in their feed?\nConsider relevance to the user's niche interests, creativity, completeness and coherence.\nChoose \"tie\" only if they are genuinely indistinguishable.\n\nWrite 2-3 sentences of reasoning FIRST, then give the verdict.\nReturn ONLY valid JSON, no markdown fences:\n{\"reasoning\": \"...\", \"winner\": \"A\" | \"B\" | \"tie\"}"
+  }
+}
