@@ -41,32 +41,70 @@ def load_scenes(path):
     return sb.get("title", "storyboard") if isinstance(sb, dict) else "storyboard", scenes
 
 
-_VOICE_LABELS = r"(?:VOIX(?:\s*OFF)?|VOICE(?:\s*OVER)?|VO|NARRATEUR|NARRATRICE|NARRATOR)"
+_VOICE_LABELS = r"(?:VOIX(?:\s*OFF)?|VOICE(?:\s*OVER)?|VOICEOVER|VO|NARRATEUR|NARRATRICE|NARRATOR)"
 _SFX_LABELS = r"(?:SFX|FX|BRUITAGE|MUSIQUE|MUSIC|SOUND|SON)"
 _QUOTES = "'\"\u2018\u2019\u201c\u201d\u00ab\u00bb` "
+
+FRENCH_STOPWORDS = {
+    "le", "la", "les", "un", "une", "des", "du", "de", "d'", "l'", "et", "est", "dans",
+    "pour", "avec", "qui", "que", "ce", "cette", "ces", "c'est", "pas", "sur", "au",
+    "aux", "en", "nous", "vous", "ils", "elles", "mais", "ou", "donc", "or", "ni", "car",
+    "tu", "il", "elle", "on", "mon", "ton", "son", "mes", "tes", "ses", "faire", "plus"
+}
+
+ENGLISH_STOPWORDS = {
+    "the", "a", "an", "and", "is", "are", "was", "were", "this", "that", "these", "those",
+    "with", "for", "to", "in", "on", "at", "by", "from", "of", "you", "your", "it", "its",
+    "they", "them", "their", "we", "us", "our", "he", "him", "his", "she", "her", "here",
+    "there", "what", "which", "who", "when", "where", "why", "how", "all", "any", "not", "so"
+}
+
+
+def detect_language(scenes):
+    """Auto-detect primary language of scenes (English vs French)."""
+    all_text = " ".join(
+        (s.get("audio_cue", "") + " " + s.get("subtitle", "") + " " + s.get("visual_description", ""))
+        for s in scenes
+    ).lower()
+    words = set(re.findall(r"\b[a-zA-Z\u00C0-\u017F']+\b", all_text))
+    fr_count = len(words.intersection(FRENCH_STOPWORDS))
+    en_count = len(words.intersection(ENGLISH_STOPWORDS))
+    return "fr" if fr_count > en_count else "en"
 
 
 def clean_audio_cue(cue, raw=False):
     """
-    The storyboard agent often writes cues like:
-        VOIX : 'Tu te souviens ?' SFX : télé qui grésille
-    We treat the cue as speech, but drop the labels and the SFX descriptions so
-    the TTS doesn't read "S F X" out loud. Use raw=True to read the cue verbatim.
+    Cleans audio cues into spoken script dialogue:
+    - Strips voice labels and descriptors, e.g. "VO (low, forensic):" or "Voix off (nostalgique) :"
+    - Strips SFX blocks, e.g. "SFX: chalk tap"
+    - Extracts dialogue from explicit quotes (« ... », " ... ", ' ... ')
+    - Drops trailing sound effect annotations like '+ beat de révélation (whoosh)'
     """
     cue = (cue or "").strip()
     if raw or not cue:
         return cue
 
-    # 1) Keep only the segments introduced by a voice label, stop at an SFX label.
-    pattern = rf"\b{_VOICE_LABELS}\s*:\s*(.*?)(?=\b{_SFX_LABELS}\b\s*:|\b{_VOICE_LABELS}\s*:|$)"
-    parts = re.findall(pattern, cue, flags=re.I | re.S)
-    if parts:
-        text = " ".join(p.strip(_QUOTES + " \n") for p in parts if p.strip(_QUOTES))
+    # 1) Strip explicit SFX segments starting with SFX: or SFX -
+    text = re.split(rf"\b{_SFX_LABELS}\b\s*[:\-]", cue, flags=re.I)[0].strip()
+
+    # 2) Strip voice prefix with optional parentheticals or descriptive tone words before colon
+    # e.g., 'VO (low, close-mic, forensic):' or 'Voix off (nostalgique) :' or 'Voix off complice :' or 'Voiceover:'
+    text = re.sub(rf"^\s*{_VOICE_LABELS}(?:\s*\([^)]*\)|\s+[\w\u00C0-\u017F]+)*\s*[:\-]\s*", "", text, flags=re.I).strip()
+
+    # 3) If dialogue is inside explicit French quotation marks « ... », extract it
+    french_quotes = re.findall(r"«\s*(.*?)\s*»", text, flags=re.S)
+    if french_quotes:
+        text = " ".join(french_quotes).strip()
     else:
-        # 2) No voice label: just cut out any "SFX : ..." segments.
-        text = re.sub(rf"\b{_SFX_LABELS}\b\s*(?:of|de|:)?[^.!?]*[.!?]?", "", cue, flags=re.I)
-        text = text.strip(_QUOTES + " \n")
-    return re.sub(r"\s+", " ", text).strip() or cue
+        # Check if text has a trailing '+ sfx description' or '+ sound'
+        text = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", text, flags=re.S).strip()
+
+    # 4) Strip any remaining quote marks at boundaries
+    text = text.strip(_QUOTES)
+
+    # 5) Clean whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or cue
 
 
 # --------------------------------------------------------------------------- #
@@ -391,7 +429,7 @@ def main():
     ap = argparse.ArgumentParser(description="Storyboard JSON -> slideshow video with TTS")
     ap.add_argument("storyboard", help="path to the storyboard JSON")
     ap.add_argument("-o", "--output", default="outputs/video/output.mp4")
-    ap.add_argument("--lang", default="fr", help="TTS language code (default: fr)")
+    ap.add_argument("--lang", default="auto", help="TTS language code ('auto', 'en', 'fr', 'es', 'de', 'it'; default: auto)")
     ap.add_argument("--voice", default=None,
                     help="Specific TTS voice (e.g. 'fr-FR-HenriNeural', 'en-US-ChristopherNeural'). Auto-selected if omitted.")
     ap.add_argument("--rate", type=int, default=170, help="TTS speaking rate (words/min)")
@@ -422,8 +460,14 @@ def main():
 
     title, scenes = load_scenes(args.storyboard)
     print(f"Building '{title}' ({len(scenes)} scenes)")
+
+    lang = args.lang
+    if lang == "auto":
+        lang = detect_language(scenes)
+        print(f"Detected storyboard language: '{lang}'")
+
     size = (args.width, args.height)
-    tts = TTS(args.lang, args.rate, args.tts_backend, args.voice)
+    tts = TTS(lang, args.rate, args.tts_backend, args.voice)
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
