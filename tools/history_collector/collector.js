@@ -26,7 +26,7 @@
   // 1. Root Container
   const container = createEl(
     "div",
-    "position:fixed;top:24px;right:24px;width:380px;max-width:calc(100vw - 48px);background:#10131b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.12);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,0.65);z-index:9999999;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:18px;box-sizing:border-box;line-height:1.45;"
+    "position:fixed;top:24px;right:24px;width:400px;max-width:calc(100vw - 48px);background:#10131b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.12);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,0.75);z-index:9999999;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:18px;box-sizing:border-box;line-height:1.45;"
   );
   container.id = "yt-shorts-collector-modal";
 
@@ -42,14 +42,19 @@
   closeBtn.title = "Close (Esc)";
   closeBtn.onmouseenter = () => { closeBtn.style.color = "#fff"; };
   closeBtn.onmouseleave = () => { closeBtn.style.color = "#94a3b8"; };
-  closeBtn.onclick = () => container.remove();
 
-  // Escape key listener to close modal
+  let isCancelled = false;
+  let forceStop = false;
+
+  const cleanup = () => {
+    isCancelled = true;
+    container.remove();
+    window.removeEventListener("keydown", handleKeyDown);
+  };
+  closeBtn.onclick = cleanup;
+
   const handleKeyDown = (e) => {
-    if (e.key === "Escape") {
-      container.remove();
-      window.removeEventListener("keydown", handleKeyDown);
-    }
+    if (e.key === "Escape") cleanup();
   };
   window.addEventListener("keydown", handleKeyDown);
 
@@ -58,27 +63,38 @@
   container.appendChild(header);
 
   // Status message
-  const statusEl = createEl("div", "font-size:13px;color:#94a3b8;margin-bottom:12px;", "Scanning watch history...");
+  const statusEl = createEl("div", "font-size:13px;color:#94a3b8;margin-bottom:10px;", "Scanning watch history...");
   container.appendChild(statusEl);
 
   // Progress Bar
-  const progressBar = createEl("div", "height:4px;background:#1e293b;border-radius:2px;overflow:hidden;margin-bottom:14px;");
-  const progressInner = createEl("div", "width:15%;height:100%;background:#e50914;transition:width 0.25s ease;");
+  const progressBar = createEl("div", "height:4px;background:#1e293b;border-radius:2px;overflow:hidden;margin-bottom:12px;");
+  const progressInner = createEl("div", "width:5%;height:100%;background:#e50914;transition:width 0.25s ease;");
   progressBar.appendChild(progressInner);
   container.appendChild(progressBar);
 
+  // Live stop button (visible during scanning)
+  const scanControlBox = createEl("div", "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;");
+  const liveCountBadge = createEl("span", "font-size:12px;color:#cbd5e1;font-variant-numeric:tabular-nums;", "0 Shorts found so far");
+  const stopEarlyBtn = createEl("button", "background:#1e293b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.08);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;transition:background 0.15s ease;", "Export Now");
+  stopEarlyBtn.onmouseenter = () => { stopEarlyBtn.style.background = "#283548"; };
+  stopEarlyBtn.onmouseleave = () => { stopEarlyBtn.style.background = "#1e293b"; };
+  stopEarlyBtn.onclick = () => { forceStop = true; };
+  scanControlBox.appendChild(liveCountBadge);
+  scanControlBox.appendChild(stopEarlyBtn);
+  container.appendChild(scanControlBox);
+
   // Preview List Container
-  const previewList = createEl("div", "max-height:140px;overflow-y:auto;background:#090b10;border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px 12px;font-size:12px;color:#cbd5e1;margin-bottom:14px;display:none;");
+  const previewList = createEl("div", "max-height:160px;overflow-y:auto;background:#090b10;border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px 12px;font-size:12px;color:#cbd5e1;margin-bottom:14px;display:none;");
   container.appendChild(previewList);
 
   // Actions Container
   const actionsBox = createEl("div", "display:none;flex-direction:column;gap:8px;");
 
-  const downloadBtn = createEl("button", "background:#e50914;color:#fff;border:none;padding:9px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity 0.15s ease;", "Download JSON");
+  const downloadBtn = createEl("button", "background:#e50914;color:#fff;border:none;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity 0.15s ease;", "Download JSON");
   downloadBtn.onmouseenter = () => { downloadBtn.style.opacity = "0.9"; };
   downloadBtn.onmouseleave = () => { downloadBtn.style.opacity = "1"; };
 
-  const copyBtn = createEl("button", "background:#1e293b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.08);padding:8px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;transition:background 0.15s ease;", "Copy JSON to Clipboard");
+  const copyBtn = createEl("button", "background:#1e293b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.08);padding:9px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;transition:background 0.15s ease;", "Copy JSON to Clipboard");
   copyBtn.onmouseenter = () => { copyBtn.style.background = "#283548"; };
   copyBtn.onmouseleave = () => { copyBtn.style.background = "#1e293b"; };
 
@@ -91,19 +107,64 @@
 
   document.body.appendChild(container);
 
-  // 2. Smooth auto-scroll down the history feed
-  const SCROLL_STEPS = 5;
-  for (let i = 1; i <= SCROLL_STEPS; i++) {
-    statusEl.textContent = `Loading history... scrolling (${i}/${SCROLL_STEPS})`;
-    progressInner.style.width = `${(i / (SCROLL_STEPS + 1)) * 100}%`;
-    window.scrollBy({ top: 1800, behavior: "smooth" });
-    await new Promise((r) => setTimeout(r, 650));
+  // Helper to count distinct shorts currently rendered in DOM
+  function countDistinctShortsInDOM() {
+    const anchors = document.querySelectorAll('a[href*="/shorts/"]');
+    const ids = new Set();
+    for (const a of anchors) {
+      const href = a.getAttribute("href") || "";
+      const m = href.match(/\/shorts\/([a-zA-Z0-9_-]+)/);
+      if (m) ids.add(m[1]);
+    }
+    return ids.size;
   }
 
-  statusEl.textContent = "Extracting Shorts...";
-  progressInner.style.width = "95%";
+  // 2. Dynamic auto-scrolling
+  // Target: up to 80 shorts or 25 scroll cycles
+  const TARGET_SHORTS = 80;
+  const MAX_SCROLL_STEPS = 25;
+  let lastHeight = 0;
+  let noNewHeightCount = 0;
 
-  // 3. Collect Shorts elements
+  for (let i = 1; i <= MAX_SCROLL_STEPS; i++) {
+    if (isCancelled || forceStop) break;
+
+    const currentCount = countDistinctShortsInDOM();
+    liveCountBadge.textContent = `${currentCount} Shorts found so far`;
+    statusEl.textContent = `Scanning history... scrolling (${i}/${MAX_SCROLL_STEPS})`;
+
+    const progressPct = Math.min(85, Math.max(10, Math.round((currentCount / TARGET_SHORTS) * 85)));
+    progressInner.style.width = `${progressPct}%`;
+
+    if (currentCount >= TARGET_SHORTS) {
+      break;
+    }
+
+    // Scroll to bottom
+    const currentHeight = document.documentElement.scrollHeight;
+    window.scrollTo({ top: currentHeight, behavior: "smooth" });
+
+    if (currentHeight === lastHeight) {
+      noNewHeightCount++;
+      if (noNewHeightCount >= 3) {
+        // End of history reached
+        break;
+      }
+    } else {
+      noNewHeightCount = 0;
+    }
+    lastHeight = currentHeight;
+
+    await new Promise((r) => setTimeout(r, 700));
+  }
+
+  if (isCancelled) return;
+
+  scanControlBox.style.display = "none";
+  statusEl.textContent = "Extracting Shorts details...";
+  progressInner.style.width = "90%";
+
+  // 3. Extract shorts details from page
   const shortsList = [];
   const seenUrls = new Set();
   const shortAnchors = Array.from(document.querySelectorAll('a[href*="/shorts/"]'));
@@ -150,16 +211,20 @@
     shortsList.push({ title, url: canonicalUrl });
   }
 
-  // 4. Enrich missing titles via public YouTube oEmbed
+  // 4. Enrich missing titles via public YouTube oEmbed in batches
   const missingItems = shortsList.filter((s) => s.title.startsWith("YouTube Short (") || !s.title);
   if (missingItems.length > 0) {
     statusEl.textContent = `Resolving titles (${missingItems.length} videos)...`;
-    for (let i = 0; i < missingItems.length; i += 5) {
-      const batch = missingItems.slice(i, i + 5);
+    for (let i = 0; i < missingItems.length; i += 6) {
+      if (isCancelled) return;
+      const batch = missingItems.slice(i, i + 6);
       await Promise.all(
         batch.map(async (item) => {
           try {
-            const res = await fetch(`/oembed?url=${encodeURIComponent(item.url)}&format=json`);
+            const controller = new AbortController();
+            const tid = setTimeout(() => controller.abort(), 3500);
+            const res = await fetch(`/oembed?url=${encodeURIComponent(item.url)}&format=json`, { signal: controller.signal });
+            clearTimeout(tid);
             if (res.ok) {
               const data = await res.json();
               if (data.title) {
@@ -169,7 +234,7 @@
           } catch (e) {}
         })
       );
-      progressInner.style.width = `${95 + Math.min(5, Math.round(((i + 5) / missingItems.length) * 5))}%`;
+      progressInner.style.width = `${90 + Math.min(10, Math.round(((i + 6) / missingItems.length) * 10))}%`;
     }
   }
 
@@ -177,7 +242,7 @@
 
   // 5. Present extracted items
   if (shortsList.length === 0) {
-    statusEl.textContent = "No Shorts found in recent history. Make sure you are on YouTube Watch History.";
+    statusEl.textContent = "No Shorts found in history. Make sure you are on YouTube Watch History.";
     return;
   }
 
@@ -201,6 +266,8 @@
   }
 
   actionsBox.style.display = "flex";
+  downloadBtn.textContent = `Download JSON (${shortsList.length} Shorts)`;
+
   const jsonString = JSON.stringify(shortsList, null, 2);
 
   // Download Handler
@@ -216,7 +283,7 @@
     URL.revokeObjectURL(blobUrl);
     downloadBtn.textContent = "Downloaded!";
     setTimeout(() => {
-      downloadBtn.textContent = "Download JSON";
+      downloadBtn.textContent = `Download JSON (${shortsList.length} Shorts)`;
     }, 2500);
   };
 
