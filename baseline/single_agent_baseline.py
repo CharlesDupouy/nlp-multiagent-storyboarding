@@ -45,7 +45,7 @@ class SingleAgentBaseline:
         model: str,
         base_url: str | None = None,
         api_key: str | None = None,
-        output_dir: str = "outputs/storyboards",
+        output_dir: str = "outputs",
         target_duration: int = 60,
     ) -> None:
         self.model = model
@@ -65,22 +65,25 @@ class SingleAgentBaseline:
             model=cfg["baseline"]["model"],
             base_url=cfg.get("llm", {}).get("base_url"),
             api_key=cfg.get("llm", {}).get("api_key"),
-            output_dir=cfg.get("output_dir", "outputs/storyboards"),
+            output_dir=cfg.get("output_dir", "outputs"),
         )
 
-    def run(self, videos: list[dict[str, str]]) -> SharedState:
+    def run(self, videos: list[dict[str, str]], user_id: str | None = None) -> SharedState:
         """
         Generate a storyboard from raw watch history in a single LLM call.
 
         Same signature as Orchestrator.run() for easy swapping in evaluation.
         """
+        uid = (user_id or "default_user").strip()
         reset_token_usage()
-        run_id = "baseline_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_id = f"baseline_{uid}_{timestamp}"
         state = SharedState(
+            user_id=uid,
             user_history=UserHistory(videos=videos),
             run_id=run_id,
         )
-        state.log(f"[BASELINE] Single-agent run started. run_id={run_id}.")
+        state.log(f"[BASELINE] Single-agent run started. user={uid}, run_id={run_id}.")
 
         history_text = "\n".join(
             f"- [vid{i+1}] Title: \"{v.get('title', '')}\" | URL: {v.get('url', '')}"
@@ -138,8 +141,13 @@ class SingleAgentBaseline:
         state.estimated_cost_usd = cost
         state.log(f"[BASELINE] Token audit: {usage.get('prompt_tokens', 0):,} prompt + {usage.get('completion_tokens', 0):,} completion. Est. Cost: ${cost:.5f} USD.")
         state.log(f"[BASELINE] Storyboard generated: '{state.storyboard.title}'.")
-        out_path = self.output_dir / f"storyboard_{run_id}.json"
+        
+        # Save output in outputs/<user>/baseline/baseline_storyboard_<user>_<datetime>.json
+        base_dir = self.output_dir.parent if self.output_dir.name in ("storyboards", "agentic", "baseline") else self.output_dir
+        baseline_dir = base_dir / uid / "baseline"
+        out_path = baseline_dir / f"baseline_storyboard_{uid}_{timestamp}.json"
         state.save(str(out_path))
+        setattr(state, "output_json_path", str(out_path))
         return state
 
 

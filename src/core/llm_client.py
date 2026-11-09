@@ -121,6 +121,22 @@ def extract_json(raw: str) -> Any:
             except Exception:
                 pass
 
+    # 4. Truncation repair: attempt balancing unclosed braces/brackets
+    if first_brace != -1:
+        sub = text[first_brace:]
+        for last_close in [sub.rfind("}"), sub.rfind("]"), sub.rfind('"')]:
+            if last_close != -1:
+                prefix = sub[:last_close + 1]
+                open_braces = prefix.count("{") - prefix.count("}")
+                open_brackets = prefix.count("[") - prefix.count("]")
+                if open_braces >= 0 and open_brackets >= 0:
+                    repair = prefix + ("]" * open_brackets) + ("}" * open_braces)
+                    repair = re.sub(r",\s*([\]}])", r"\1", repair)
+                    try:
+                        return json.loads(repair)
+                    except Exception:
+                        pass
+
     raise json.JSONDecodeError("No valid JSON found in response", text, 0)
 
 
@@ -166,8 +182,8 @@ def chat_completion(
     is_reasoner = "reasoner" in resolved_model.lower() or resolved_model.lower().startswith(("o1", "o3"))
 
     # For reasoning models, reasoning tokens count against completion limit.
-    # Ensure sufficient token headroom (minimum 4096) to prevent output truncation.
-    call_max_tokens = max(max_tokens, 4096) if is_reasoner else max_tokens
+    # Ensure sufficient token headroom (minimum 8192) to prevent output truncation.
+    call_max_tokens = max(max_tokens, 8192) if is_reasoner else max_tokens
 
     call_kwargs: dict[str, Any] = {
         "model": resolved_model,

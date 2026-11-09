@@ -135,6 +135,7 @@ class SharedState:
             self.news_context = self.knowledge_context
 
     # --- METADATA ---
+    user_id: str = "default_user"
     run_id: str = ""
     pipeline_log: list[str] = field(default_factory=list)  # human-readable trace
     token_usage: dict[str, int] = field(default_factory=dict)  # {"prompt_tokens": int, "completion_tokens": int, "total_calls": int}
@@ -184,6 +185,7 @@ class SharedState:
                 scenes=sb_data.get("scenes", []),
                 overall_narrative=sb_data.get("overall_narrative", ""),
             ),
+            user_id=data.get("user_id", "default_user"),
             run_id=data.get("run_id", ""),
             pipeline_log=data.get("pipeline_log", []),
             token_usage=data.get("token_usage", {}),
@@ -270,6 +272,7 @@ class SharedState:
     def save(self, path: str) -> None:
         """Save the full state as JSON and companion Markdown file."""
         json_path = Path(path)
+        json_path.parent.mkdir(parents=True, exist_ok=True)
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
 

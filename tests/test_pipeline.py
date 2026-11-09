@@ -450,6 +450,50 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(len(single), 1)
         self.assertEqual(len(single[0]), 10)
 
+    def test_user_output_directory_structure_and_naming(self):
+        """Test per-user subfolder structure and universal naming convention."""
+        import tempfile, re
+        from unittest.mock import MagicMock
+        from baseline.single_agent_baseline import SingleAgentBaseline
+
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = (
+            '{"title": "Paper Art", "overall_narrative": "Paper folds.", '
+            '"scenes": [{"scene_id": 1, "description": "Paper desk", '
+            '"image_query": "origami paper", "subtitle": "Fold here.", '
+            '"audio_cue": "Voice: Look at this paper.", "duration_seconds": 10}]}'
+        )
+        mock_response.usage.prompt_tokens = 40
+        mock_response.usage.completion_tokens = 40
+        mock_client.chat.completions.create.return_value = mock_response
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            baseline = SingleAgentBaseline(model="deepseek-chat", output_dir=tmp_dir)
+            baseline.client = mock_client
+            state = baseline.run(
+                [{"title": "Paper Magic", "url": "https://youtube.com/shorts/test"}],
+                user_id="charles"
+            )
+
+            self.assertEqual(state.user_id, "charles")
+            self.assertTrue(re.match(r"^baseline_charles_\d{8}_\d{6}$", state.run_id))
+
+            user_baseline_dir = Path(tmp_dir) / "charles" / "baseline"
+            self.assertTrue(user_baseline_dir.exists(), "User baseline directory should exist")
+
+            json_files = list(user_baseline_dir.glob("baseline_storyboard_charles_*.json"))
+            md_files = list(user_baseline_dir.glob("baseline_storyboard_charles_*.md"))
+            self.assertEqual(len(json_files), 1, "Should create exactly 1 baseline storyboard JSON")
+            self.assertEqual(len(md_files), 1, "Should create exactly 1 companion Markdown file")
+
+            filename = json_files[0].name
+            self.assertTrue(
+                re.match(r"^baseline_storyboard_charles_\d{8}_\d{6}\.json$", filename),
+                f"Filename '{filename}' must follow universal naming convention"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

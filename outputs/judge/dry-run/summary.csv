@@ -1,7 +1,0 @@
-dimension,agentic_grade_on_5,baseline_grade_on_5,grade_delta,agentic_wins,baseline_wins,ties,total_calls,agentic_win_rate,position_consistency,binom_p_value
-relevance,3.00,1.50,+1.50,0,0,2,2,n/a,1.000,n/a
-creativity,5.00,2.50,+2.50,1,1,0,2,0.500,0.000,1.0000
-completeness,4.00,4.00,+0.00,1,1,0,2,0.500,0.000,1.0000
-coherence,3.00,4.00,-1.00,0,1,1,2,0.000,0.000,1.0000
-visual_grounding,3.00,1.00,+2.00,1,0,1,2,1.000,0.000,1.0000
-overall,3.60,2.60,+1.00,0,0,2,2,n/a,1.000,n/a

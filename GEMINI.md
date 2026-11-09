@@ -50,7 +50,7 @@ python3 src/tools/import_user_history.py --input /path/to/exported.json --user p
 ### Evaluation & Scoring
 ```bash
 # Compare Multi-Agent and Baseline storyboards side-by-side (with position debiasing)
-python3 evaluation/llm_judge.py --compare outputs/storyboards/storyboard_ma.json outputs/storyboards/storyboard_base.json
+python3 evaluation/llm_judge.py --compare outputs/<user>/agentic/agentic_storyboard_<user>_<datetime>.json outputs/<user>/baseline/baseline_storyboard_<user>_<datetime>.json
 
 # Run the batch blinded LLM judge over all generated storyboard pairs (with A/B order debiasing)
 python3 evaluation/llm_judge.py --dry-run                      # mock test plumbing without API calls
@@ -60,11 +60,11 @@ python3 evaluation/llm_judge.py --preset gpt4o                 # full benchmark 
 
 ### Video Sketch Rendering (TTS + Subtitles + Slideshow)
 ```bash
-# Render a storyboard JSON into an MP4 video with burned-in subtitles and TTS audio
-python3 storyboard_to_video.py outputs/storyboards/storyboard_xyz.json -o outputs/storyboard_xyz.mp4
+# Render a storyboard JSON into an MP4 video (automatically placed alongside storyboard)
+python3 storyboard_to_video.py outputs/<user>/agentic/agentic_storyboard_<user>_<datetime>.json
 
-# Render with specific language voice or keep temporary audio files
-python3 storyboard_to_video.py outputs/storyboards/storyboard_xyz.json --lang fr --keep-temp
+# Or render with explicit output path, specific voice, or keeping temp files
+python3 storyboard_to_video.py outputs/<user>/baseline/baseline_storyboard_<user>_<datetime>.json -o outputs/custom.mp4 --voice en-US-ChristopherNeural
 ```
 
 ---
@@ -119,7 +119,10 @@ GroupProjetct/
 ├── data/
 │   └── user_histories/          # Anonymized watch histories (e.g., example.json, charles.json)
 ├── outputs/
-│   ├── storyboards/             # Generated JSON and Markdown storyboards (.gitignore applied)
+│   ├── <user>/                  # Per-user subdirectories (e.g. example, charles)
+│   │   ├── agentic/             # Agentic storyboards (JSON+MD) and rendered videos (MP4)
+│   │   ├── baseline/            # Baseline storyboards (JSON+MD) and rendered videos (MP4)
+│   │   └── judge/               # Per-user LLM judge evaluations and comparisons
 │   └── judge/                   # Batch judge benchmark results, CSV summaries & cache
 ├── tests/
 │   └── test_pipeline.py         # Unit tests for state, tools, query cleaning & serialization

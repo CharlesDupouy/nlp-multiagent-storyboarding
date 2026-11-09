@@ -76,7 +76,7 @@ def clean_audio_cue(cue, raw=False):
     """
     Cleans audio cues into spoken script dialogue:
     - Strips voice labels and descriptors, e.g. "VO (low, forensic):" or "Voix off (nostalgique) :"
-    - Strips SFX blocks, e.g. "SFX: chalk tap"
+    - Strips SFX blocks regardless of order (e.g. "SFX: thunk... VO: 'Hello'" or "VO: 'Hello' SFX: thunk")
     - Extracts dialogue from explicit quotes (« ... », " ... ", ' ... ')
     - Drops trailing sound effect annotations like '+ beat de révélation (whoosh)'
     """
@@ -84,25 +84,30 @@ def clean_audio_cue(cue, raw=False):
     if raw or not cue:
         return cue
 
-    # 1) Strip explicit SFX segments starting with SFX: or SFX -
-    text = re.split(rf"\b{_SFX_LABELS}\b\s*[:\-]", cue, flags=re.I)[0].strip()
-
-    # 2) Strip voice prefix with optional parentheticals or descriptive tone words before colon
-    # e.g., 'VO (low, close-mic, forensic):' or 'Voix off (nostalgique) :' or 'Voix off complice :' or 'Voiceover:'
-    text = re.sub(rf"^\s*{_VOICE_LABELS}(?:\s*\([^)]*\)|\s+[\w\u00C0-\u017F]+)*\s*[:\-]\s*", "", text, flags=re.I).strip()
-
-    # 3) If dialogue is inside explicit French quotation marks « ... », extract it
-    french_quotes = re.findall(r"«\s*(.*?)\s*»", text, flags=re.S)
-    if french_quotes:
-        text = " ".join(french_quotes).strip()
+    # 1) If voice label(s) exist anywhere in the cue, extract speech segments following the voice label(s)
+    voice_pattern = rf"\b{_VOICE_LABELS}(?:\s*\([^)]*\)|\s+[\w\u00C0-\u017F]+)*\s*[:\-]\s*(.*?)(?=\b{_SFX_LABELS}\b\s*[:\-]|\b{_VOICE_LABELS}\b\s*[:\-]|$)"
+    parts = re.findall(voice_pattern, cue, flags=re.I | re.S)
+    if parts:
+        cleaned_parts = []
+        for p in parts:
+            p_clean = p.strip()
+            french_quotes = re.findall(r"«\s*(.*?)\s*»", p_clean, flags=re.S)
+            if french_quotes:
+                cleaned_parts.append(" ".join(french_quotes))
+            else:
+                p_clean = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", p_clean, flags=re.S)
+                cleaned_parts.append(p_clean.strip(_QUOTES + " \n"))
+        text = " ".join(cp for cp in cleaned_parts if cp)
     else:
-        # Check if text has a trailing '+ sfx description' or '+ sound'
-        text = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", text, flags=re.S).strip()
+        # 2) No voice label: strip any SFX blocks and trailing annotations
+        text = re.sub(rf"\b{_SFX_LABELS}\b\s*[:\-][^.!?]*[.!?]?", "", cue, flags=re.I)
+        french_quotes = re.findall(r"«\s*(.*?)\s*»", text, flags=re.S)
+        if french_quotes:
+            text = " ".join(french_quotes)
+        else:
+            text = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", text, flags=re.S)
+        text = text.strip(_QUOTES + " \n")
 
-    # 4) Strip any remaining quote marks at boundaries
-    text = text.strip(_QUOTES)
-
-    # 5) Clean whitespace
     text = re.sub(r"\s+", " ", text).strip()
     return text or cue
 
@@ -428,7 +433,8 @@ def build_scene_clip(scene, idx, tmp, tts, size, args):
 def main():
     ap = argparse.ArgumentParser(description="Storyboard JSON -> slideshow video with TTS")
     ap.add_argument("storyboard", help="path to the storyboard JSON")
-    ap.add_argument("-o", "--output", default="outputs/video/output.mp4")
+    ap.add_argument("-o", "--output", default=None,
+                    help="Output MP4 path. If omitted, automatically placed alongside the storyboard.")
     ap.add_argument("--lang", default="auto", help="TTS language code ('auto', 'en', 'fr', 'es', 'de', 'it'; default: auto)")
     ap.add_argument("--voice", default=None,
                     help="Specific TTS voice (e.g. 'fr-FR-HenriNeural', 'en-US-ChristopherNeural'). Auto-selected if omitted.")
@@ -469,7 +475,17 @@ def main():
     size = (args.width, args.height)
     tts = TTS(lang, args.rate, args.tts_backend, args.voice)
 
-    out_path = Path(args.output)
+    if args.output:
+        out_path = Path(args.output)
+    else:
+        sb_path = Path(args.storyboard)
+        stem = sb_path.stem
+        if "storyboard" in stem:
+            video_name = stem.replace("storyboard", "video") + ".mp4"
+        else:
+            video_name = f"video_{stem}.mp4"
+        out_path = sb_path.parent / video_name
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     tmp = Path(tempfile.mkdtemp(prefix="storyboard_"))

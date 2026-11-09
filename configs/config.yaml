@@ -26,4 +26,4 @@ pipeline:
   max_news_results: 5           # results per search query
   images_per_theme: 2           # images per user theme
 
-output_dir: "outputs/storyboards"
+output_dir: "outputs"

@@ -17,10 +17,9 @@ build/
 venv/
 env/
 
-# Outputs (ignore all local runs except committed reference storyboards)
-outputs/storyboards/*
-!outputs/storyboards/storyboard_baseline_20261030_234731_1896cb67.*
-!outputs/storyboards/storyboard_20261031_124354_0ec406a8.*
+# Outputs (ignore all local generated runs by default)
+outputs/*
+!outputs/.gitkeep
 outputs/*.tmp
 outputs/*.mp4
 *.mp4

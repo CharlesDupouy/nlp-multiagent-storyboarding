@@ -1,6 +1,0 @@
-metric,agentic_mean,baseline_mean,delta,ci_lo,ci_hi,wilcoxon_p,n
-relevance,5,2,3,nan,nan,,1
-creativity,5,2,3,nan,nan,,1
-completeness,5,5,0,nan,nan,,1
-coherence,5,4,1,nan,nan,,1
-visual_grounding,3,2,1,nan,nan,,1

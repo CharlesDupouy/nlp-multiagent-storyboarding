@@ -57,7 +57,7 @@ class Orchestrator:
         director_model: str | None = None,
         base_url: str | None = None,
         api_key: str | None = None,
-        output_dir: str = "outputs/storyboards",
+        output_dir: str = "outputs",
     ) -> None:
         client = get_client(base_url=base_url, api_key=api_key)
 
@@ -94,28 +94,32 @@ class Orchestrator:
             scriptwriter_model=models.get("scriptwriter", "deepseek-chat"),
             base_url=cfg.get("llm", {}).get("base_url"),
             api_key=cfg.get("llm", {}).get("api_key"),
-            output_dir=cfg.get("output_dir", "outputs/storyboards"),
+            output_dir=cfg.get("output_dir", "outputs"),
         )
 
-    def run(self, videos: list[dict[str, str]]) -> SharedState:
+    def run(self, videos: list[dict[str, str]], user_id: str | None = None) -> SharedState:
         """
         Run the full multi-agent pipeline for a given user watch history.
 
         Args:
-            videos: List of {"title": str, "url": str} dicts.
+            videos:  List of {"title": str, "url": str} dicts.
+            user_id: Optional username or identifier for output grouping (default: 'default_user').
 
         Returns:
             The fully populated SharedState (with storyboard).
         """
+        uid = (user_id or "default_user").strip()
         reset_token_usage()
-        run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_id = f"agentic_{uid}_{timestamp}"
 
         # Initialise shared state
         state = SharedState(
+            user_id=uid,
             user_history=UserHistory(videos=videos),
             run_id=run_id,
         )
-        state.log(f"Pipeline started. run_id={run_id}. Videos in history: {len(videos)}.")
+        state.log(f"Pipeline started. user={uid}, run_id={run_id}. Videos in history: {len(videos)}.")
 
         # Phase 1: User Profiling (Two-Round with Spoken Transcripts)
         state.log("--- Phase 1: User Profiling (ProfilerAgent) ---")
@@ -152,9 +156,12 @@ class Orchestrator:
         state.log(f"Token audit: {usage.get('prompt_tokens', 0):,} prompt + {usage.get('completion_tokens', 0):,} completion across {usage.get('total_calls', 0)} calls. Est. Cost: ${cost:.5f} USD.")
         state.log("Pipeline complete.")
 
-        # Save output
-        out_path = self.output_dir / f"storyboard_{run_id}.json"
+        # Save output in outputs/<user>/agentic/agentic_storyboard_<user>_<datetime>.json
+        base_dir = self.output_dir.parent if self.output_dir.name in ("storyboards", "agentic", "baseline") else self.output_dir
+        agentic_dir = base_dir / uid / "agentic"
+        out_path = agentic_dir / f"agentic_storyboard_{uid}_{timestamp}.json"
         state.save(str(out_path))
+        setattr(state, "output_json_path", str(out_path))
         state.log(f"Output saved to {out_path}.")
 
         return state

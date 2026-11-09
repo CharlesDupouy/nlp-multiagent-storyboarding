@@ -50,7 +50,7 @@ class ScriptwriterAgent(BaseAgent):
             system_prompt=_DRAFT_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             temperature=0.75,
-            max_tokens=2500,
+            max_tokens=4000,
         )
 
         data = _parse_storyboard_response(raw_response)
@@ -81,7 +81,7 @@ class ScriptwriterAgent(BaseAgent):
             system_prompt=_REFINE_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             temperature=0.6,
-            max_tokens=2500,
+            max_tokens=4000,
         )
 
         refined_data = _parse_storyboard_response(raw_response)

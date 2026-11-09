@@ -21,10 +21,10 @@ python3 main.py --history data/user_histories/example.json
 python3 main.py --history data/user_histories/example.json --baseline
 
 # 5. Render a storyboard JSON into a video sketch (TTS + subtitles + slideshow MP4)
-python3 storyboard_to_video.py outputs/storyboards/storyboard_xyz.json -o outputs/storyboard_xyz.mp4
+python3 storyboard_to_video.py outputs/<user>/agentic/agentic_storyboard_<user>_<datetime>.json
 
 # 6. Run LLM-as-a-Judge comparison (side-by-side with position debiasing)
-python3 evaluation/llm_judge.py --compare outputs/storyboards/storyboard_ma.json outputs/storyboards/storyboard_base.json
+python3 evaluation/llm_judge.py --compare outputs/<user>/agentic/agentic_storyboard_<user>_<datetime>.json outputs/<user>/baseline/baseline_storyboard_<user>_<datetime>.json
 
 # Or run batch automated evaluation across all history pairs
 python3 evaluation/llm_judge.py --preset deepseek
@@ -113,7 +113,10 @@ To collect watch histories from study participants without API keys or credentia
 ├── data/
 │   └── user_histories/            # User watch histories (JSON)
 ├── outputs/
-│   ├── storyboards/               # Generated storyboard JSON and companion Markdown files
+│   ├── <user>/                    # Per-user subdirectories (e.g. example, charles)
+│   │   ├── agentic/               # Agentic storyboards (JSON+MD) and rendered videos (MP4)
+│   │   ├── baseline/              # Baseline storyboards (JSON+MD) and rendered videos (MP4)
+│   │   └── judge/                 # Per-user LLM judge evaluations and comparisons
 │   └── judge/                     # Batch evaluation results, summary reports & CSV exports
 ├── prompts/                       # Plain-text registry of versioned system prompts (.txt)
 ├── tests/                         # Unit tests (run with python3 -m unittest discover tests)

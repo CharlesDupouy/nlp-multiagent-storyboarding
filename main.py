@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -29,6 +30,10 @@ def parse_args() -> argparse.Namespace:
         help="Path to a JSON file containing the user's watch history."
     )
     parser.add_argument(
+        "--user", type=str, default=None,
+        help="Username for output grouping (default: stem of history file)."
+    )
+    parser.add_argument(
         "--baseline", action="store_true",
         help="Run the single-agent baseline instead of the full pipeline."
     )
@@ -44,27 +49,36 @@ def main() -> None:
         print(f"Error: history file not found: {history_path}", file=sys.stderr)
         sys.exit(1)
 
+    user_id = args.user or history_path.stem
+    user_id = re.sub(r"[^\w\-]", "_", user_id)
+
     with open(history_path, "r", encoding="utf-8") as f:
         videos = json.load(f)  # expects list of {"title": str, "url": str}
 
     if args.baseline:
         from baseline.single_agent_baseline import SingleAgentBaseline
         runner = SingleAgentBaseline.from_config(args.config)
-        print("Running single-agent baseline...")
+        print(f"Running single-agent baseline for user: '{user_id}'...")
     else:
         from src.orchestrator import Orchestrator
         runner = Orchestrator.from_config(args.config)
-        print("Running multi-agent pipeline...")
+        print(f"Running multi-agent pipeline for user: '{user_id}'...")
 
-    state = runner.run(videos=videos)
+    state = runner.run(videos=videos, user_id=user_id)
 
     sb = state.storyboard
-    json_path = Path("outputs/storyboards") / f"storyboard_{state.run_id}.json"
+    json_path = Path(getattr(state, "output_json_path", ""))
+    if not json_path.exists():
+        system_dir = "baseline" if args.baseline else "agentic"
+        prefix = "baseline_storyboard" if args.baseline else "agentic_storyboard"
+        json_path = Path("outputs") / user_id / system_dir / f"{prefix}_{state.run_id}.json"
     md_path = json_path.with_suffix(".md")
 
     print("\n" + "=" * 60)
     print(f"🎬 STORYBOARD: {sb.title}")
-    print(f"   Duration: {sb.target_duration_seconds}s | Run ID: {state.run_id}")
+    print(f"   User: {user_id} | Duration: {sb.target_duration_seconds}s | Run ID: {state.run_id}")
+    print(f"   Saved JSON: {json_path}")
+    print(f"   Saved Markdown: {md_path}")
     print("=" * 60)
     print(f"Narrative: {sb.overall_narrative}\n")
 

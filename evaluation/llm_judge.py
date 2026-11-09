@@ -314,25 +314,39 @@ def load_items(sb_dir: Path, hist_dir, run_ids, max_history):
 
     wanted = None
     if run_ids:
-        wanted = {r.replace("storyboard_", "").replace(".json", "") for r in run_ids}
+        wanted = {r.replace("storyboard_", "").replace("agentic_storyboard_", "").replace("baseline_storyboard_", "").replace(".json", "") for r in run_ids}
+
+    # Find storyboard JSONs recursively under sb_dir
+    json_paths = set()
+    if sb_dir.exists():
+        for pat in ("**/agentic_storyboard_*.json", "**/baseline_storyboard_*.json", "**/storyboard_*.json", "*.json"):
+            for p in sb_dir.glob(pat):
+                if p.is_file() and not p.name.startswith(("run_config", "cache", "result", "judge_")):
+                    json_paths.add(p)
 
     cands = {}  # (hkey, system) -> list[(sortkey, run_id, data)]
-    for p in sorted(sb_dir.glob("storyboard_*.json")):
+    for p in sorted(json_paths):
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
         except Exception as e:
             print(f"[warn] unreadable {p.name}: {e}", file=sys.stderr)
             continue
-        run_id = data.get("run_id") or p.stem.replace("storyboard_", "")
-        if wanted and run_id not in wanted:
+        run_id = data.get("run_id") or p.stem
+        if wanted and run_id not in wanted and p.stem not in wanted:
             continue
         sb = data.get("storyboard", {})
         videos = data.get("user_history", {}).get("videos", [])
         if not sb.get("scenes") or not videos:
-            print(f"[warn] skipping {p.name}: no scenes (parse failure?) or no history", file=sys.stderr)
             continue
-        system = "baseline" if run_id.startswith("baseline_") else "agentic"
-        sortkey = run_id.replace("baseline_", "")  # timestamps sort chronologically
+
+        # Detect system
+        is_base = (
+            run_id.startswith("baseline_")
+            or p.name.startswith("baseline_")
+            or "baseline" in str(p.parent).lower()
+        )
+        system = "baseline" if is_base else "agentic"
+        sortkey = run_id
         cands.setdefault((history_key(videos), system), []).append((sortkey, run_id, data))
 
     items, hkeys = {}, sorted({k for k, _ in cands})
@@ -340,7 +354,16 @@ def load_items(sb_dir: Path, hist_dir, run_ids, max_history):
         if (hk, "agentic") not in cands or (hk, "baseline") not in cands:
             print(f"[warn] history {names.get(hk, hk[:8])} has only one system; skipped.", file=sys.stderr)
             continue
-        uid = names.get(hk, f"user_{hk[:8]}")
+        ag_data = cands[(hk, "agentic")][-1][2]
+        bl_data = cands[(hk, "baseline")][-1][2]
+        uid = (
+            ag_data.get("user_id")
+            or bl_data.get("user_id")
+            or names.get(hk, f"user_{hk[:8]}")
+        )
+        if uid == "default_user":
+            uid = names.get(hk, f"user_{hk[:8]}")
+
         entry = {}
         for system in ("agentic", "baseline"):
             runs = sorted(cands[(hk, system)])
@@ -804,7 +827,7 @@ def summarize(abs_recs, pair_recs, users, texts, out_dir, human_csv):
 # --------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--storyboards", type=Path, default=Path("outputs/storyboards"))
+    ap.add_argument("--storyboards", type=Path, default=Path("outputs"))
     ap.add_argument("--history-dir", type=Path, default=Path("data/user_histories"),
                     help="Only used to name users by their history file (e.g. participant_alice).")
     ap.add_argument("--run-ids", nargs="*", default=None,
@@ -838,6 +861,7 @@ def main():
     if args.dry_run:
         args.model = "dry-run"
 
+    compare_user_id = None
     if args.compare:
         path_a, path_b = args.compare
         with open(path_a, encoding="utf-8") as f:
@@ -856,11 +880,20 @@ def main():
             agentic_data, baseline_data = data_a, data_b
             agentic_id, baseline_id = path_a.stem, path_b.stem
 
+        # Detect user identifier
+        compare_user_id = agentic_data.get("user_id") or baseline_data.get("user_id")
+        if not compare_user_id or compare_user_id == "default_user":
+            m = re.search(r"outputs[/\\]([^/\\]+)", str(path_a)) or re.search(r"outputs[/\\]([^/\\]+)", str(path_b))
+            if m and m.group(1) not in ("storyboards", "judge", "agentic", "baseline"):
+                compare_user_id = m.group(1)
+            else:
+                compare_user_id = "comparison"
+
         history_videos = (agentic_data.get("user_history", {}).get("videos")
                           or baseline_data.get("user_history", {}).get("videos")
                           or [])
         items = {
-            "comparison": {
+            compare_user_id: {
                 "agentic": (agentic_id, agentic_data),
                 "baseline": (baseline_id, baseline_data),
                 "history": render_history(history_videos, args.max_history),
@@ -959,6 +992,22 @@ def main():
                         print(f"      * {d:<18}: {w:<8}{score_info}")
                 print(f"    Reasoning: {p.get('reasoning')}")
         print("=========================================================\n")
+
+        # Persist structured comparison to outputs/<user>/judge/
+        user_target = compare_user_id or "comparison"
+        user_judge_dir = Path("outputs") / user_target / "judge"
+        user_judge_dir.mkdir(parents=True, exist_ok=True)
+        cmp_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        cmp_json = user_judge_dir / f"judge_comparison_{user_target}_{cmp_ts}.json"
+        cmp_json.write_text(json.dumps({
+            "user_id": user_target,
+            "timestamp": cmp_ts,
+            "agentic_id": agentic_id,
+            "baseline_id": baseline_id,
+            "absolute_evaluations": abs_recs,
+            "pairwise_evaluations": pair_recs,
+        }, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Saved comparison to: {cmp_json}")
 
 
 if __name__ == "__main__":
