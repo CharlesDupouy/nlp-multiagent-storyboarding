@@ -70,7 +70,7 @@ To collect watch histories from study participants without API keys or credentia
 ```
 .
 ├── main.py                        # Top-level CLI (pipeline & baseline execution)
-├── AGENT.md                       # Machine & agent onboarding specification
+├── GEMINI.md                      # Machine & agent onboarding specification
 ├── configs/config.yaml            # Model and API configuration
 ├── src/
 │   ├── orchestrator.py            # 7-phase pipeline controller

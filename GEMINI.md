@@ -74,7 +74,6 @@ python3 storyboard_to_video.py outputs/storyboards/storyboard_xyz.json --lang fr
 ```
 GroupProjetct/
 ├── GEMINI.md                    # This authoritative operating manual
-├── AGENT.md                     # Legacy operating manual (kept for compatibility)
 ├── main.py                      # CLI entry point (--history, --baseline, --config)
 ├── storyboard_to_video.py       # Video sketch renderer (storyboard JSON -> MP4 with TTS & subtitles)
 ├── requirements.txt             # Python dependencies
