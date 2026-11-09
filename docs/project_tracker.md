@@ -232,7 +232,7 @@ Evaluated with `evaluation/llm_judge.py --compare` using `deepseek-chat` with th
 - [ ] Run full automated benchmark matrix across collected histories (Max)
 - [ ] Conduct blind human preference A/B testing on rendered neural video sketches (Max)
 - [ ] Synthesize benchmark results tables, figures, and win-rate plots
-- [ ] Expand living error analysis (CS-01 through CS-08) into final conference paper
+- [ ] Expand living error analysis (CS-01 through CS-09) into final conference paper
 - [ ] Draft 6–8 page conference-style report in LaTeX (`Assignment/main.tex`) (Charles lead)
 - [ ] Deliver live project presentation & demo (Nov 24–26) (All)
 
@@ -297,6 +297,13 @@ Documented failure modes encountered during development, their root causes, and 
 - **Root Cause:** Python video generation scripts commonly assume `ffprobe` is installed alongside `ffmpeg`. However, lightweight environments, conda environments, and minimal Docker containers frequently install only `ffmpeg` or `imageio-ffmpeg` without the standalone `ffprobe` executable.
 - **Mitigation & Fix:** Rewrote `audio_duration()` to check `shutil.which("ffprobe")`. If missing, it falls back to running `ffmpeg -i <file> -f null -` and extracting the `Duration: HH:MM:SS.ss` timestamp via regex from ffmpeg's stderr output, plus a native Python `wave` module fallback for WAV files. Coupled with bundled `imageio-ffmpeg` auto-detection, rendering is now 100% self-contained on any environment.
 - **Paper Section:** *Methodology: Robust Multimedia Tooling; Error Analysis.*
+
+### CS-09: History Collector Web Tool 404 from GitHub Pages Visibility Policy
+- **Component:** `tools/history_collector/` & GitHub Pages hosting
+- **Trigger / Symptom:** Participants accessing the live client-side data collection URL (`https://charlesdupouy.github.io/nlp-multiagent-storyboarding/`) were greeted by an HTTP 404 error page.
+- **Root Cause:** The GitHub repository visibility had been toggled to `private`. On standard personal/free GitHub accounts, GitHub Pages for private repositories is disabled by platform policy (`Page is disabled because current plan does not support private GitHub Pages (HTTP 422)`), causing GitHub to automatically suspend pages builds and unpublish the deployed site.
+- **Mitigation & Fix:** Restored repository visibility to `public` via GitHub CLI (`gh repo edit --visibility public`), pushed current release commits to `origin/main`, and confirmed deployment workflow execution (`pages-build-deployment` finished with `success`). Site accessibility verified via HTTP 200 checks on the live endpoint.
+- **Paper Section:** *Methodology: Data Collection & Ethics; Reproducibility.*
 
 ---
 
