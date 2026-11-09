@@ -51,6 +51,20 @@ python3 evaluation/evaluator.py --storyboard outputs/storyboards/storyboard_xyz.
 
 # Perform side-by-side comparative scoring between Multi-Agent and Baseline storyboards
 python3 evaluation/evaluator.py --compare outputs/storyboards/storyboard_ma.json outputs/storyboards/storyboard_base.json
+
+# Run the batch blinded LLM judge over all generated storyboard pairs (with A/B order debiasing)
+python3 evaluation/llm_judge.py --dry-run                      # mock test plumbing without API calls
+python3 evaluation/llm_judge.py --preset deepseek --limit 5    # pilot run with DeepSeek
+python3 evaluation/llm_judge.py --preset gpt4o                 # full benchmark with GPT-4o
+```
+
+### Video Sketch Rendering (TTS + Subtitles + Slideshow)
+```bash
+# Render a storyboard JSON into an MP4 video with burned-in subtitles and TTS audio
+python3 storyboard_to_video.py outputs/storyboards/storyboard_xyz.json -o outputs/storyboard_xyz.mp4
+
+# Render with specific language voice or keep temporary audio files
+python3 storyboard_to_video.py outputs/storyboards/storyboard_xyz.json --lang fr --keep-temp
 ```
 
 ---
@@ -62,6 +76,7 @@ GroupProjetct/
 ├── GEMINI.md                    # This authoritative operating manual
 ├── AGENT.md                     # Legacy operating manual (kept for compatibility)
 ├── main.py                      # CLI entry point (--history, --baseline, --config)
+├── storyboard_to_video.py       # Video sketch renderer (storyboard JSON -> MP4 with TTS & subtitles)
 ├── requirements.txt             # Python dependencies
 ├── configs/
 │   └── config.yaml              # Default configuration (models, API URLs, parameters)
@@ -98,13 +113,15 @@ GroupProjetct/
 ├── baseline/
 │   └── single_agent_baseline.py # Fair, competitive zero-shot single-agent baseline
 ├── evaluation/
-│   └── evaluator.py             # LLM-as-a-judge scoring CLI (Relevance, Completeness, Creativity, Alignment)
+│   ├── evaluator.py             # Single/pairwise LLM-as-a-judge scoring CLI
+│   └── llm_judge.py             # Automated batch judge with position debiasing & caching
 ├── tools/
 │   └── history_collector/       # Client-side watch history collector (bookmarklet + HTML)
 ├── data/
 │   └── user_histories/          # Anonymized watch histories (e.g., example.json, charles.json)
 ├── outputs/
-│   └── storyboards/             # Generated JSON and Markdown storyboards (.gitignore applied)
+│   ├── storyboards/             # Generated JSON and Markdown storyboards (.gitignore applied)
+│   └── judge/                   # Batch judge benchmark results, CSV summaries & cache
 ├── tests/
 │   └── test_pipeline.py         # Unit tests for state, tools, query cleaning & serialization
 ├── docs/
