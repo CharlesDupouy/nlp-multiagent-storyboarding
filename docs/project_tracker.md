@@ -16,13 +16,13 @@
 
 | Component | Owner | Status |
 |---|---|---|
-| Data collection & public dataset filtering | Antoine | 🔲 In progress (Peer collector live on GitHub Pages) |
-| Single-agent baseline | Antoine | 🟢 Implemented, neutralized & tested on real user data |
-| Multi-agent framework (core architecture) | Charles | 🟢 Writers' Room + Director + Targeted Retrieval complete & tested (v3.0) |
-| Prompt engineering & refinement | Charles | 🟢 v3.0 active (Adaptive user style + neutral baseline) |
-| Real API integration (news, images) | Charles | 🟢 100% Complete (NewsAPI + Unsplash + YouTube transcripts integrated & live) |
-| LLM-as-a-judge evaluator | Max | 🟢 Complete (`evaluation/llm_judge.py` with batch & pairwise `--compare`) |
-| Automated evaluation over dataset | Max | 🟢 Tested with deepseek & dry-run (`outputs/judge/`); pending full batch |
+| Data collection & public dataset filtering | Antoine | 🔲 In progress (Peer collector live on GitHub Pages; `--split` partitioning ready) |
+| Single-agent baseline | Antoine | 🟢 Implemented, neutralized & tested on real user data (with Unsplash visual parity) |
+| Multi-agent framework (core architecture) | Charles | 🟢 Writers' Room (R1) + Director (R1) + Knowledge Retriever (Multi-Tier) + Art Director (Re-ranking) complete & verified (v4.1) |
+| Prompt engineering & refinement | Charles | 🟢 v3.1 active (Verbatim dialogue, zero placeholders, domain-targeted research, anti-regurgitation) |
+| Real API integration (knowledge, images) | Charles | 🟢 100% Complete (NewsAPI + Wikipedia + Unsplash + YouTube transcripts integrated & live) |
+| LLM-as-a-judge evaluator | Max | 🟢 Complete (`evaluation/llm_judge.py` with 5D pairwise verdicts, 1–5 Likert grades, and visual caption grounding) |
+| Automated evaluation over dataset | Max | 🟢 Validated on DeepSeek pilot & dry-run (`outputs/judge/`); pending full batch |
 | Demo sketch renderer (TTS + images) | Max | 🟢 Neural Edge-TTS + dynamic subtitles + Unsplash slideshow (`storyboard_to_video.py`) |
 
 ---
@@ -36,13 +36,13 @@ flowchart TD
     I["User Watch History\n(vid1, vid2, ... titles + URLs)"] --> P1["Phase 1A: Profiler Round 1\nMacro scan & active selection of 3-4 target videos"]
     P1 --> T1["Tool: youtube_transcript_api\nExtracts actual spoken dialogue & oEmbed channel metadata"]
     T1 --> P2["Phase 1B: Profiler Round 2\nSynthesizes fine-grained profile with concrete spoken insights"]
-    P2 --> WR["Phase 2: WritersRoomAgent\nBrainstorms 3 distinct candidate pitches matching user style"]
-    WR --> DIR["Phase 3: DirectorAgent (Showrunner)\nCritiques all 3 pitches, selects winner & issues production notes"]
-    DIR --> N["Phase 4: NewsRetrieverAgent (Targeted Research)\nFormulates search queries specific to the winning pitch & director notes"]
-    N --> S1["Phase 5: ScriptwriterAgent (Draft Pass)\nDrafts 60s storyboard executing winning pitch + director guidance"]
-    S1 --> IMG["Phase 6: ImageSearchAgent\nAnalyzes draft scenes → photographic search → assigns img1, img2..."]
-    IMG --> S2["Phase 7: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
-    S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated 'image_url' (no hallucination)"]
+    P2 --> WR["Phase 2: WritersRoomAgent (DeepSeek R1)\nBrainstorms 3 distinct candidate pitches matching user style"]
+    WR --> DIR["Phase 3: DirectorAgent (DeepSeek R1 Showrunner)\nCritiques all 3 pitches, selects winner & issues production notes"]
+    DIR --> K["Phase 4: KnowledgeRetrieverAgent (Targeted Research)\nMulti-tiered search: NewsAPI + MediaWiki/Wikipedia + LLM Synthesis"]
+    K --> S1["Phase 5: ScriptwriterAgent (Draft Pass, DeepSeek R1)\nDrafts 60s storyboard executing winning pitch + director guidance"]
+    S1 --> ART["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no camera jargon)\n2. 4-candidate Unsplash API retrieval\n3. Semantic re-ranking to select best photographic asset"]
+    ART --> S2["Phase 7: ScriptwriterAgent (Refine Pass, DeepSeek R1)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
+    S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated Unsplash CDN URLs (zero hallucination)"]
     RES --> O["Storyboard JSON & Markdown\n(Pitches, Director Decision, Scenes, Subtitles, Narration, Image URLs)"]
 ```
 
@@ -50,32 +50,32 @@ flowchart TD
 > **Why this Writers' Room architecture over a linear pipeline?**  
 > 1. **User Style Adaptability:** Instead of forcing every user into an arbitrary documentary format, the Writers' Room proposes 3 distinct concepts matching their natural preferred style (witty humor, craft, pop culture, tech puzzle, or lore).
 > 2. **Parallel Exploration (Exploration vs. Exploitation):** Parallel candidate pitches allow creative breadth before committing to production.
-> 3. **Showrunner Deliberation:** The Director evaluates pitches against 3s hook potential, personal resonance, and visual feasibility.
-> 4. **Targeted Information Retrieval:** The News/Fact Retriever searches for concrete evidence *tailored specifically to the winning pitch* and the Director's instructions.
-> 5. **Symbolic Asset Grounding (`img1`, `img2`, ...):** Decoupling creative image selection from URL handling completely eliminates URL hallucination.
+> 3. **Showrunner Deliberation (DeepSeek R1):** The Director evaluates pitches against 3s hook potential, personal resonance, and visual feasibility.
+> 4. **Targeted Information Retrieval:** The Knowledge Retriever searches for concrete evidence across news, Wikipedia, and technical lore *tailored specifically to the winning pitch* and the Director's instructions.
+> 5. **Art Director Photographic Grounding:** Sanitizes cinematic jargon and semantically re-ranks 4 candidates per scene. Symbolic keys (`img1`, `img2`, ...) eliminate URL hallucination.
 
 ### Agent Roles
 
-| Agent | Input | Output | Model | Tools |
-|---|---|---|---|---|
-| **ProfilerAgent** | Watch history (`vid1`, `vid2`, ...) | `UserProfile` (interests, themes, style, investigated_insights) | `deepseek-chat` | `youtube_transcript_api` + oEmbed |
-| **WritersRoomAgent** | `UserProfile` + insights | `candidate_pitches` (3 diverse structured story pitches) | `deepseek-chat` | None (Creative synthesis) |
-| **DirectorAgent** | `UserProfile` + `candidate_pitches` | `selected_pitch` + `director_critique` + `director_notes` | `deepseek-chat` | Editorial critique |
-| **NewsRetrieverAgent** | `selected_pitch` + `director_notes` | `NewsContext` (targeted headlines + summaries) | `deepseek-chat` | NewsAPI / Serper / Web Search |
-| **ScriptwriterAgent (Draft)** | `selected_pitch` + `director_notes` + `NewsContext` | Draft `Storyboard` (scenes, descriptions, audio) | `deepseek-chat` | None (LLM synthesis) |
-| **ImageSearchAgent** | Draft `Storyboard` scenes | `ImageContext` (`img1`, `img2`, ... catalog) | `deepseek-chat` | Unsplash / Pexels (keyword search) |
-| **ScriptwriterAgent (Refine)** | Draft `Storyboard` + `ImageContext` | Refined `Storyboard` (`image_ref: 'img1'`) | `deepseek-chat` | Programmatic URL resolver |
+| Agent | Canonical Class | Input | Output | Model | Tools |
+|---|---|---|---|---|---|
+| **Phase 1: Profiler** | `ProfilerAgent` | Watch history (`vid1`, `vid2`, ...) | `UserProfile` (interests, themes, style, spoken insights) | `deepseek-chat` | `youtube_transcript_api` + oEmbed metadata |
+| **Phase 2: Writers' Room** | `WritersRoomAgent` | `UserProfile` + spoken insights | `candidate_pitches` (3 diverse story concepts) | `deepseek-reasoner` (R1) | Creative reasoning pass |
+| **Phase 3: Director** | `DirectorAgent` | `UserProfile` + `candidate_pitches` | `selected_pitch` + critique + production notes | `deepseek-reasoner` (R1) | Critical showrunner evaluation |
+| **Phase 4: Knowledge Retriever** | `KnowledgeRetrieverAgent` | `selected_pitch` + production notes | `KnowledgeContext` (verified headlines, lore & summaries) | `deepseek-chat` | `knowledge_tool.py` (NewsAPI + Wikipedia + Tavily + LLM Synthesis) |
+| **Phase 5: Scriptwriter (Draft)** | `ScriptwriterAgent` | Pitch + notes + `KnowledgeContext` | Draft `Storyboard` (scenes, verbatim dialogue, cues) | `deepseek-reasoner` (R1) | Structured narrative synthesis |
+| **Phase 6: Art Director** | `ArtDirectorAgent` | Draft scenes + query prompts | `ImageContext` (`img1`..`img6` catalog of validated photos) | `deepseek-chat` | `image_tool.py` (Unsplash API + 4-candidate semantic re-ranking) |
+| **Phase 7: Scriptwriter (Refine)** | `ScriptwriterAgent` | Draft scenes + `ImageContext` | Refined `Storyboard` (`image_ref: 'img1'`) | `deepseek-reasoner` (R1) | Programmatic CDN URL resolver |
 
 ### Controlled Comparison
 
 ```mermaid
 flowchart LR
-    H["Same user\nwatch history"]
-    H --> MA["Multi-Agent Pipeline\nProfile → News Brainstorm → Draft → Scene Image Search → Refinement"]
-    H --> SA["Single-Agent Baseline\nZero-shot, same model, same watch history"]
-    MA --> SB1["Storyboard A\n(Grounded with imagery & news)"]
-    SA --> SB2["Storyboard B\n(Zero-shot single pass)"]
-    SB1 --> E["Evaluator\nLLM-as-judge + human A/B"]
+    H["Identical User Watch History\n(videos: list[dict[str, str]])"]
+    H --> MA["Multi-Agent Pipeline (v4.1)\nProfile → Writers' Room → Director → Knowledge → Draft → Art Director → Refine"]
+    H --> SA["Single-Agent Baseline (v3.5)\nZero-shot, same model, same watch history + Naive Top-1 Unsplash Search"]
+    MA --> SB1["Storyboard A\n(Grounded with curated imagery & verified facts)"]
+    SA --> SB2["Storyboard B\n(Zero-shot single pass with naive image retrieval)"]
+    SB1 --> E["Automated Judge & Blind Human A/B\n5D Pairwise Rubric + 1-5 Likert Grades + Neural Video Sketches"]
     SB2 --> E
 ```
 
@@ -92,9 +92,11 @@ flowchart LR
 - YouTube Shorts watch histories from peers
 - Format: `[{"title": "...", "url": "https://..."}]`
 - Represented in agent prompts cleanly as `[vid1] Title: "..." | URL: ...`
-- **Collector Tool:** Client-side 1-click bookmarklet + tutorial web page (`tools/history_collector/index.html`) created and ready for distribution.
-- **Ingestion Helper:** `src/tools/import_user_history.py` validates and saves participant files to `data/user_histories/<user>.json`.
-- **Status:** Tooling complete; peer recruitment & data collection in progress (Antoine / Team).
+- **Collector Tool:** Client-side 1-click bookmarklet + tutorial web page (`tools/history_collector/index.html`) hosted on GitHub Pages (`https://charlesdupouy.github.io/nlp-multiagent-storyboarding/`).
+- **Ingestion & Slicing Helper:** `src/tools/import_user_history.py` validates and saves participant files to `data/user_histories/<user>.json`.
+  - Supports `--split <X>` (e.g. `--split 3`) to partition a single participant's watch history into $X$ balanced, disjoint slices (`<user>_part1.json`, `<user>_part2.json`, ...).
+  - Supports `--split-mode` (`random` vs `sequential`) and deterministic `--seed` for reproducible, unbiased data partitioning, multiplying the blind A/B evaluation sample size (e.g., 10 participants $\times$ 3 slices = 30 evaluation pairs).
+- **Status:** Tooling complete & verified; peer recruitment & data collection in progress (Antoine / Team).
 - > [!CAUTION]
   > Must be anonymised before storage. Do not commit real user data to git.
 
@@ -104,15 +106,17 @@ flowchart LR
 
 | Parameter | Value | Rationale |
 |---|---|---|
-| LLM provider | DeepSeek API | OpenAI-compatible, very cheap |
-| Extraction agents (`profiler`, `knowledge_retriever`, `art_director`) | `deepseek-chat` | Fast classification, keyword extraction & re-ranking; low latency |
+| LLM provider | DeepSeek API | OpenAI-compatible, high reasoning capability, very low latency & cost |
+| Extraction agents (`profiler`, `knowledge_retriever`, `art_director`) | `deepseek-chat` | Fast classification, keyword extraction & semantic re-ranking |
 | Reasoning agents (`writers_room`, `director`, `scriptwriter`) | `deepseek-reasoner` (DeepSeek R1) | High-order chain-of-thought reasoning for diverse pitch ideation, critical pitch selection, and sharp narrative drafting |
-| Baseline model | `deepseek-chat` | Neutral zero-shot comparison |
+| Baseline model | `deepseek-chat` | Neutral zero-shot comparison with verbatim dialogue & naive top-1 image retrieval |
 | Temperature (profiler) | 0.4 | Low — factual extraction |
-| Temperature (news brainstorm) | 0.7 | Medium — creative angle ideation |
+| Temperature (knowledge brainstorm) | 0.7 | Medium — creative angle ideation |
 | Temperature (script draft/refine) | N/A (`deepseek-reasoner`) | Managed internally by R1 deterministic reasoning |
-| News & Knowledge API | NewsAPI.org + MediaWiki (Wikipedia) | Multi-tiered live API client with evergreen lore lookup and LLM fallback |
-| Image API | Unsplash API | Verified live API client with photographic query sanitization |
+| News & Knowledge API | NewsAPI.org + MediaWiki (Wikipedia REST) | Multi-tiered live API client with evergreen lore lookup and LLM Tier 3 fact synthesis fallback |
+| Image API | Unsplash API | Verified live API client with photographic query sanitization & Art Director 4-candidate re-ranking |
+| Speech Synthesis (TTS) | Microsoft Edge Neural TTS (`edge-tts`) | Broadcast-quality neural voices (`fr-FR-HenriNeural`, `en-US-ChristopherNeural`, etc.) with standalone `ffmpeg` duration probing; graceful offline fallback to `pyttsx3`/`espeak` |
+| DeepSeek Account Balance | **$3.35 USD** (live) | Sufficient for ~615+ full 7-phase multi-agent runs or ~11,000 baseline runs |
 
 > [!TIP]
 > For the report's **Reproducibility Statement**, log exact model name, API access date, and decoding params for every experiment run. These are saved in each `storyboard_*.json` output file.
@@ -127,28 +131,34 @@ All system prompts are externalized in `prompts/*.txt` as a versioned plain-text
 |---|---|---|---|---|
 | ProfilerAgent (Round 1) | `prompts/profiler_r1_macro.txt` | v2.0 | Macro history scan & targeted video selection | 2026-10-31 |
 | ProfilerAgent (Round 2) | `prompts/profiler_r2_synthesis.txt` | v2.0 | Fine-grained profile synthesis from spoken transcripts | 2026-10-31 |
-| WritersRoomAgent | `prompts/writers_room.txt` | v3.0 | 3 distinct candidate pitches adapted to user vibe | 2026-10-31 |
-| DirectorAgent | `prompts/director.txt` | v3.0 | Pitch critique, winning selection & production notes | 2026-10-31 |
-| NewsRetrieverAgent | `prompts/news_targeted_research.txt` | v3.1 | Domain-targeted factual search queries (news, encyclopedia, technical) | 2026-11-09 |
-| ScriptwriterAgent (Draft) | `prompts/scriptwriter_draft.txt` | v3.1 | 60s storyboard narrative execution (verbatim dialogue, zero placeholders) | 2026-11-09 |
-| ImageSearchAgent (Query) | `prompts/image_query.txt` | v3.2 | Concrete physical nouns (no camera jargon) | 2026-10-31 |
-| ImageSearchAgent (Curate) | `prompts/art_director_selection.txt` | v3.2 | Art director semantic re-ranking of photo candidates | 2026-10-31 |
-| ScriptwriterAgent (Refine) | `prompts/scriptwriter_refine.txt` | v3.1 | Visual grounding with symbolic image refs (verbatim dialogue, zero placeholders) | 2026-11-09 |
+| WritersRoomAgent | `prompts/writers_room.txt` | v3.0 | 3 distinct candidate pitches adapted to user vibe (R1) | 2026-10-31 |
+| DirectorAgent | `prompts/director.txt` | v3.0 | Pitch critique, winning selection & production notes (R1) | 2026-10-31 |
+| KnowledgeRetrieverAgent | `prompts/news_targeted_research.txt` | v3.1 | Domain-targeted factual search queries (news, encyclopedia, technical) | 2026-11-09 |
+| ScriptwriterAgent (Draft) | `prompts/scriptwriter_draft.txt` | v3.1 | 60s storyboard narrative execution (verbatim dialogue, zero placeholders, R1) | 2026-11-09 |
+| ArtDirectorAgent (Query) | `prompts/image_query.txt` | v3.2 | Concrete physical nouns (no camera jargon) | 2026-10-31 |
+| ArtDirectorAgent (Curate) | `prompts/art_director_selection.txt` | v3.2 | Art director semantic re-ranking of photo candidates | 2026-10-31 |
+| ScriptwriterAgent (Refine) | `prompts/scriptwriter_refine.txt` | v3.1 | Visual grounding with symbolic image refs (verbatim dialogue, zero placeholders, R1) | 2026-11-09 |
 | Baseline | `prompts/baseline.txt` | v2.2 | Neutral, competitive zero-shot baseline (verbatim dialogue + naive top-1 image query schema) | 2026-11-09 |
-| LLM Judge | `prompts/judge.txt` | v2.0 | 4-dimensional rubric with Multi-Facet Relevance & Anti-Regurgitation Penalty | 2026-11-09 |
+| LLM Judge | `prompts/judge.txt` | v2.1 | 5-dimensional rubric (Relevance, Creativity, Completeness, Coherence, Visual Grounding) with blind photo captions & Anti-Regurgitation Penalty | 2026-11-09 |
 
 ---
 
 ## Evaluation Plan
 
 ### Automated (LLM-as-a-Judge)
-- **Metrics** (1–5 Likert scale in `evaluation/llm_judge.py`):
-  - **Relevance:** Does the storyboard connect with ANY genuine interest cluster in the watch history (multi-facet directive)? Merely rehashing a watched video is penalized.
-  - **Completeness:** Are all storyboard fields filled and coherent (visuals, subtitles, verbatim audio cues)?
-  - **Creativity:** Is the narrative fresh and original? Remakes/rehashes of watched videos are strictly CAPPED at 2/5 (or ≤4.0/10).
-  - **Coherence & Visual Alignment:** Narrative flow, pacing, and how faithfully retrieved photo assets match scene descriptions.
-- **Judge model:** `deepseek-chat` (or `gpt-4o` / `deepseek-reasoner`)
-- **Scale:** Run over public dataset and collected peer histories
+- **Framework:** `evaluation/llm_judge.py` evaluates storyboards either pairwise (`--compare A B` or `--preset deepseek/gpt4o`) or individually, applying strict position debiasing ($A/B$ followed by $B/A$ order swapping).
+- **5-Dimensional Multi-Criteria Rubric (`prompts/judge.txt`, v2.1):**
+  - **1. Relevance:** Does the storyboard connect with ANY genuine interest cluster in the watch history (multi-facet directive)? Merely rehashing a watched video is penalized.
+  - **2. Creativity:** Is the narrative fresh and original? Remakes/rehashes of watched videos are strictly **CAPPED at 2/5 (or ≤4.0/10)** under the Anti-Regurgitation Penalty.
+  - **3. Completeness:** Are all storyboard fields populated, coherent, and producible (visual descriptions, subtitles, verbatim audio dialogue cues)?
+  - **4. Coherence:** Narrative pacing, tension, hook payoff, and flow across the 60-second arc.
+  - **5. Visual Grounding:** Unblinded photographic asset fidelity — how faithfully retrieved photo captions (`Visual Asset Photo: {image_desc}`) ground the narrative scenes (without exposing URLs or system identities).
+- **Dual Evaluation Outputs:**
+  - **1–5 Likert numerical grades** per dimension (with decimal averages).
+  - **Explicit pairwise winner verdicts** for each dimension (`relevance_winner`, `creativity_winner`, `completeness_winner`, `coherence_winner`, `visual_grounding_winner`) plus `overall_winner` (`"A" | "B" | "tie"`).
+- **Aggregations:** Dimension-level win rates, ties, and position consistency percentages exported to `summary.txt` and `summary.csv`.
+- **Legacy Cleanup:** Obsolete, ungrounded `evaluation/evaluator.py` cleanly removed.
+- **Judge models supported:** `deepseek-chat` (default budget preset), `deepseek-reasoner` (DeepSeek R1), and `gpt-4o` (gold standard benchmark).
 
 ### Human Evaluation (Blind A/B)
 - Real users see two storyboards (or rendered video sketches) — one from each system
@@ -203,15 +213,28 @@ Evaluated with `evaluation/llm_judge.py --compare` using `deepseek-chat` with th
 - [x] Real API integration for images (Unsplash API live in `src/tools/image_tool.py`)
 - [x] Baseline tested and producing output on example and real user data
 
-### Final Report (Dec 4)
-- [x] Automated evaluation implemented (`evaluation/llm_judge.py` with batch & `--compare` modes) and dry-run validated
-- [ ] Human evaluation conducted (Blind A/B test)
-- [ ] Results tables and figures
-- [ ] Failure analysis (at least 1 informative failure case)
-- [ ] Limitations and responsible use section
-- [ ] Reproducibility package (README, requirements, prompts, eval code)
-- [ ] Cost and compute statement
-- [ ] Team contributions statement
+### Mid-November Milestones (v3.0 – v4.1 Architecture & Tooling Complete)
+- [x] Writers' Room + Director showrunner architecture with 3 candidate pitches (`src/agents/writers_room_agent.py`, `src/agents/director_agent.py`)
+- [x] Hybrid model routing with DeepSeek R1 reasoning for ideation, selection, and scriptwriting
+- [x] Multi-tiered knowledge retriever (NewsAPI + Wikipedia + LLM Synthesis) preventing information starvation (`src/tools/knowledge_tool.py`)
+- [x] Art Director 4-candidate semantic re-ranking pass for stock photo assets (`src/agents/art_director_agent.py`)
+- [x] Single-agent baseline visual parity with naive top-1 image retrieval for fair comparative testing (`baseline/single_agent_baseline.py`)
+- [x] Participant watch history slicer with `--split`, `--split-mode`, and deterministic `--seed` (`src/tools/import_user_history.py`)
+- [x] Demo video sketch renderer with Microsoft Edge Neural TTS + dynamic subtitles (`storyboard_to_video.py`)
+- [x] Automated 5-dimensional pairwise LLM judge with position debiasing and visual caption grounding (`evaluation/llm_judge.py`)
+- [x] Redundant legacy `evaluation/evaluator.py` cleanly removed
+- [x] Unit test suite expanded to 24 passing tests (`tests/test_pipeline.py`)
+- [x] Authoritative agent and developer operating manual created (`GEMINI.md`)
+
+### Final Report & Evaluation Phase (Target: Dec 4)
+- [x] Automated evaluation implemented (`evaluation/llm_judge.py` with batch, `--compare`, and 5D criteria)
+- [ ] Complete peer watch history collection (10–15 participants partitioned via `--split 3`)
+- [ ] Run full automated benchmark matrix across collected histories (Max)
+- [ ] Conduct blind human preference A/B testing on rendered neural video sketches (Max)
+- [ ] Synthesize benchmark results tables, figures, and win-rate plots
+- [ ] Expand living error analysis (CS-01 through CS-08) into final conference paper
+- [ ] Draft 6–8 page conference-style report in LaTeX (`Assignment/main.tex`) (Charles lead)
+- [ ] Deliver live project presentation & demo (Nov 24–26) (All)
 
 ---
 
@@ -260,6 +283,20 @@ Documented failure modes encountered during development, their root causes, and 
 - **Root Cause:** Standard judge prompts lacked negative constraints against regurgitation and failed to distinguish between genuine personalization (extending user taste to an unseen curiosity or fresh angle) and uninspired remakes/reruns.
 - **Mitigation & Fix:** (1) Introduced explicit **Multi-Facet Relevance Directive**: a storyboard is relevant if it connects with *any* genuine interest cluster in the watch history (not just majority frequency). (2) Introduced strict **Anti-Regurgitation Penalty**: if a storyboard merely copies, rehashes, or retells an already-watched video, Creativity is **strictly capped at 2/5 (or ≤4.0/10)**, and relevance is penalized because users do not want reruns in their feeds. In comparative evaluations, baseline score dropped from 8.50 to 6.75, widening the multi-agent advantage to +2.37 Δ.
 - **Paper Section:** *Methodology: Evaluation & Position-Debiased Rubrics; Error Analysis.*
+
+### CS-07: Robotic Monotone Audio in Video Sketch Renderer Harming Human Blind Evaluations
+- **Component:** `storyboard_to_video.py`
+- **Trigger / Symptom:** Initial video sketches rendered with local offline TTS (`pyttsx3`/`espeak`) produced flat, robotic, metallic narration. In preliminary listening tests, listeners found it hard to judge narrative pacing and comedic timing, conflating low audio engine naturalness with script quality.
+- **Root Cause:** Traditional offline concatenative/formant speech engines lack natural prosody, emotional inflection, and phoneme smoothing.
+- **Mitigation & Fix:** Re-architected `storyboard_to_video.py` to use Microsoft Edge Neural TTS (`edge-tts`) as the default primary engine, supporting rich multilingual neural voices (e.g. `fr-FR-HenriNeural`, `en-US-ChristopherNeural`, `es-ES-AlvaroNeural`), while preserving local `pyttsx3`/`espeak` as graceful offline fallbacks. Video sketch audio now exhibits human-level cadence, natural breath pauses, and authentic pronunciation without cloud API subscription costs.
+- **Paper Section:** *Methodology: Demo Sketch Rendering & Human Evaluation; Error Analysis.*
+
+### CS-08: Host Environment Failure on Missing ffprobe Dependency
+- **Component:** `storyboard_to_video.py`
+- **Trigger / Symptom:** On Linux test environments without a full `ffmpeg` package from OS package managers, `storyboard_to_video.py` crashed during scene length calculation with `FileNotFoundError: [Errno 2] No such file or directory: 'ffprobe'`.
+- **Root Cause:** Python video generation scripts commonly assume `ffprobe` is installed alongside `ffmpeg`. However, lightweight environments, conda environments, and minimal Docker containers frequently install only `ffmpeg` or `imageio-ffmpeg` without the standalone `ffprobe` executable.
+- **Mitigation & Fix:** Rewrote `audio_duration()` to check `shutil.which("ffprobe")`. If missing, it falls back to running `ffmpeg -i <file> -f null -` and extracting the `Duration: HH:MM:SS.ss` timestamp via regex from ffmpeg's stderr output, plus a native Python `wave` module fallback for WAV files. Coupled with bundled `imageio-ffmpeg` auto-detection, rendering is now 100% self-contained on any environment.
+- **Paper Section:** *Methodology: Robust Multimedia Tooling; Error Analysis.*
 
 ---
 
@@ -316,10 +353,15 @@ Documented failure modes encountered during development, their root causes, and 
 - [x] Move system prompts to dedicated `prompts/` text files for cleaner reproducibility archiving
 - [x] Implement token usage accounting in `state.py` and `llm_client.py` to auto-calculate exact costs
 - [x] Create comprehensive developer & agent operating manual (`GEMINI.md`)
-- [ ] JSON parsing in agents has simple cleanup fallback — can add retry loop for edge cases
+- [x] Multi-strategy JSON extraction (`extract_json()`) and auto-headroom expansion for reasoning models (`CS-03`)
+- [x] Multi-tiered knowledge retrieval (Wikipedia + NewsAPI + LLM Synthesis) preventing information starvation (`CS-05`)
+- [x] Watch history partitioning tool with `--split`, `--split-mode`, and `--seed` (`src/tools/import_user_history.py`)
+- [x] Neural speech synthesis (Edge-TTS) + dynamic subtitles in video sketch renderer (`storyboard_to_video.py`)
+- [x] Multi-criteria 5D pairwise evaluation + 1–5 Likert grading + position debiasing (`evaluation/llm_judge.py`)
+- [x] Legacy ungrounded `evaluator.py` removed
 - [ ] Ingest 10-15 peer watch histories from web collector (Antoine)
 - [ ] Run automated batch LLM judge evaluation (`evaluation/llm_judge.py`) across all histories (Max)
-- [ ] Conduct human blind A/B evaluation (Max)
+- [ ] Conduct human blind A/B evaluation using rendered neural sketches (Max)
 - [ ] Draft 6-8 page final paper using living tracker logs (Charles)
 
 ---
