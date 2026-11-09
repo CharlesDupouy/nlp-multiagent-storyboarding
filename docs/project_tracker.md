@@ -206,6 +206,7 @@ flowchart LR
 
 | Date | Decision | Rationale | Alternatives considered |
 |---|---|---|---|
+| 2026-11-09 | Comprehensive Agent Operating Manual (`GEMINI.md`) | Establishes the canonical Antigravity/Gemini equivalent of `CLAUDE.md`. Provides any blank, no-context AI agent or engineer with full architectural orientation, standard CLI commands, directory map ("Where to look for what"), 6 core invariants, and developer workflow recipes. | Ad-hoc tribal knowledge or fragmented markdown files |
 | 2026-10-31 | Two-Phase Art Director Image Curation (v3.2) | Eliminates unrepresentative stock photos. Prohibits cinematography jargon (macro, split screen) in queries; retrieves 4 candidates per scene and uses an Art Director LLM pass to select the most visually faithful candidate | Naive top-1 search with cinematic prompts (produced irrelevant photos like basketball courts for pens) |
 | 2026-10-31 | Writers' Room + Director + Targeted News Retrieval (v3.0) | Adapts flexibly to any user style (witty humor, craft, puzzle, lore) without forcing a rigid format; parallel candidate pitches enable exploration before commitment; NewsRetriever targets the winning pitch with concrete evidence | Single rigid documentary prompt; blind retrieval before ideation |
 | 2026-10-30 | Strictly Neutral, Competitive Baseline Prompting | Academic integrity: avoids creating a "strawman" baseline. Baseline is held to the identical high standards of thematic focus, narrative arc, and storytelling without biased jokes/skit prompts | Biased/comedic baseline prompts (disingenuous comparison) |
@@ -222,10 +223,15 @@ flowchart LR
 
 ## Known Issues / TODOs
 
-- [ ] `news_tool.py` and `image_tool.py` are mock-ready — need real API keys (NewsAPI / Unsplash)
+- [x] `news_tool.py` and `image_tool.py` live API keys integrated (NewsAPI + Unsplash) with graceful mock fallback
+- [x] Move system prompts to dedicated `prompts/` text files for cleaner reproducibility archiving
+- [x] Implement token usage accounting in `state.py` and `llm_client.py` to auto-calculate exact costs
+- [x] Create comprehensive developer & agent operating manual (`GEMINI.md`)
 - [ ] JSON parsing in agents has simple cleanup fallback — can add retry loop for edge cases
-- [ ] Move system prompts to dedicated `prompts/` text files for cleaner reproducibility archiving
-- [ ] Implement token usage accounting in `state.py` to auto-calculate exact costs
+- [ ] Ingest 10-15 peer watch histories from web collector (Antoine)
+- [ ] Run automated batch LLM judge evaluation (`evaluation/evaluator.py`) across all histories (Max)
+- [ ] Conduct human blind A/B evaluation (Max)
+- [ ] Draft 6-8 page final paper using living tracker logs (Charles)
 
 ---
 
