@@ -24,7 +24,7 @@ from typing import Any
 from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
-from src.core.llm_client import chat_completion
+from src.core.llm_client import chat_completion, extract_json
 from src.core.state import SharedState, UserProfile
 from src.tools.youtube_tool import get_video_transcript, get_video_metadata
 
@@ -172,8 +172,8 @@ Synthesize a deeply fine-grained, nuanced UserProfile using the spoken words and
 
 def _parse_json(raw: str) -> dict:
     try:
-        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        return json.loads(cleaned)
+        data = extract_json(raw)
+        return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 

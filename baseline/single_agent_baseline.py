@@ -20,8 +20,16 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from src.core.llm_client import chat_completion, get_client, reset_token_usage, get_token_usage, calculate_cost_usd
+from src.core.llm_client import (
+    chat_completion,
+    get_client,
+    reset_token_usage,
+    get_token_usage,
+    calculate_cost_usd,
+    extract_json,
+)
 from src.core.state import SharedState, Storyboard, UserHistory
+from src.tools.image_tool import search_images
 
 
 class SingleAgentBaseline:
@@ -94,10 +102,32 @@ class SingleAgentBaseline:
         )
 
         storyboard_data = _parse(raw)
+        scenes = storyboard_data.get("scenes", [])
+
+        # Visual parity: resolve naive top-1 image search for each scene
+        for s in scenes:
+            query = s.get("image_query") or s.get("description", "")
+            if query:
+                try:
+                    results = search_images(query, per_page=1)
+                    if results:
+                        s["image_url"] = results[0].get("url")
+                        s["image_description"] = results[0].get("description") or results[0].get("alt_text", "")
+                    else:
+                        s["image_url"] = None
+                        s["image_description"] = None
+                except Exception as e:
+                    state.log(f"[BASELINE] Warning: image retrieval failed for scene {s.get('scene_id')}: {e}")
+                    s["image_url"] = None
+                    s["image_description"] = None
+            else:
+                s["image_url"] = None
+                s["image_description"] = None
+
         state.storyboard = Storyboard(
             title=storyboard_data.get("title", "Untitled"),
             target_duration_seconds=self.target_duration,
-            scenes=storyboard_data.get("scenes", []),
+            scenes=scenes,
             overall_narrative=storyboard_data.get("overall_narrative", ""),
         )
 
@@ -115,13 +145,25 @@ class SingleAgentBaseline:
 
 def _parse(raw: str) -> dict:
     try:
-        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
+        data = extract_json(raw)
+        if isinstance(data, dict):
+            return data
+        return {"overall_narrative": raw, "scenes": [], "title": "Parse Error"}
+    except Exception:
         return {"overall_narrative": raw, "scenes": [], "title": "Parse Error"}
 
 
-_BASELINE_SYSTEM_PROMPT = """\
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+
+
+def _load_prompt(filename: str, default: str) -> str:
+    path = _PROMPTS_DIR / filename
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
+    return default.strip()
+
+
+_BASELINE_SYSTEM_PROMPT_DEFAULT = """\
 You are an expert short-form video creator and storyteller.
 Your task is to generate a high-quality, engaging, personalized 60-second short-video storyboard based on a user's YouTube Shorts watch history.
 
@@ -133,6 +175,12 @@ Guidelines:
 - Timing: Aim for 4 to 6 scenes summing strictly to the target duration (e.g., 60 seconds).
 - Language: Write the script in the primary language of the user's history (e.g. French if the history is French, English if English).
 
+CRITICAL NEGATIVE CONSTRAINTS (NO PLACEHOLDERS):
+- NEVER write placeholder, evasive, or meta descriptions in subtitles or audio cues.
+  - FORBIDDEN: "A character says an innocent line...", "Zoom on the key quote...", "Explains the double meaning..."
+  - REQUIRED: You MUST invent or quote the EXACT words verbatim (e.g., "Voix off: 'Maman, pourquoi le monsieur a une carotte dans la poche ?'").
+- Every scene's `subtitle` and `audio_cue` must contain the actual spoken text, ready to be read by TTS or an actor.
+
 Return ONLY valid JSON with this structure:
 {
   "title": "Compelling video title",
@@ -141,6 +189,7 @@ Return ONLY valid JSON with this structure:
     {
       "scene_id": 1,
       "description": "Vivid visual scene description of what appears on screen",
+      "image_query": "Concrete physical stock photo keywords (e.g., 'white paper folded on wooden desk')",
       "subtitle": "Punchy on-screen caption (max 12 words)",
       "audio_cue": "Voiceover line or music/SFX cue",
       "duration_seconds": 10
@@ -148,3 +197,5 @@ Return ONLY valid JSON with this structure:
   ]
 }
 """
+
+_BASELINE_SYSTEM_PROMPT = _load_prompt("baseline.txt", _BASELINE_SYSTEM_PROMPT_DEFAULT)

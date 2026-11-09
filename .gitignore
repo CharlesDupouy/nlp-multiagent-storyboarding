@@ -22,6 +22,8 @@ outputs/storyboards/*
 !outputs/storyboards/storyboard_baseline_20261030_234731_1896cb67.*
 !outputs/storyboards/storyboard_20261031_124354_0ec406a8.*
 outputs/*.tmp
+outputs/*.mp4
+*.mp4
 
 # Data (may contain personal info)
 data/user_histories/*.json

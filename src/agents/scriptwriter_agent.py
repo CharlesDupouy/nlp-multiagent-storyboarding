@@ -19,11 +19,12 @@ Output written to state:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
-from src.core.llm_client import chat_completion
+from src.core.llm_client import chat_completion, extract_json
 from src.core.state import SharedState, Storyboard
 
 
@@ -203,13 +204,25 @@ Refine the storyboard scenes to visually ground them with the available assets:
 
 def _parse_storyboard_response(raw: str) -> dict:
     try:
-        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
+        data = extract_json(raw)
+        if isinstance(data, dict):
+            return data
+        return {"overall_narrative": raw, "scenes": [], "title": "Parse Error"}
+    except Exception:
         return {"overall_narrative": raw, "scenes": [], "title": "Parse Error"}
 
 
-_DRAFT_SYSTEM_PROMPT = """\
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
+
+
+def _load_prompt(filename: str, default: str) -> str:
+    path = _PROMPTS_DIR / filename
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
+    return default.strip()
+
+
+_DRAFT_SYSTEM_PROMPT_DEFAULT = """\
 You are a premier short-form video screenwriter and visual storyteller.
 Your superpower is turning creative concepts and real-world facts into gripping, fast-paced 60-second video storyboards.
 
@@ -222,6 +235,12 @@ Core Philosophy:
 - Subtitles: Punchy, memorable on-screen text (max 12 words per cut, formatted for mobile).
 - Audio cues: Charismatic voiceover lines, dynamic sound effects, or musical beats.
 - Language: Write the script in the primary language of the user's profile/history.
+
+CRITICAL NEGATIVE CONSTRAINTS (NO PLACEHOLDERS):
+- NEVER write placeholder, evasive, or meta descriptions in subtitles or audio cues.
+  - FORBIDDEN: "A character says an innocent line...", "Zoom on the key quote...", "Explains the double meaning..."
+  - REQUIRED: You MUST invent or quote the EXACT words verbatim (e.g., "Voix off: 'Maman, pourquoi le monsieur a une carotte dans la poche ?'").
+- Every scene's `subtitle` and `audio_cue` must contain the actual spoken text, ready to be read by TTS or an actor.
 
 Return ONLY valid JSON with this structure:
 {
@@ -241,8 +260,10 @@ Return ONLY valid JSON with this structure:
 Total scenes: 4 to 6 scenes summing strictly to the target duration.
 """
 
+_DRAFT_SYSTEM_PROMPT = _load_prompt("scriptwriter_draft.txt", _DRAFT_SYSTEM_PROMPT_DEFAULT)
 
-_REFINE_SYSTEM_PROMPT = """\
+
+_REFINE_SYSTEM_PROMPT_DEFAULT = """\
 You are an expert video director and storyteller refining an entertaining short video against real-world retrieved imagery (img1, img2, etc.).
 
 Refine the scenes to anchor your entertaining narrative in the real visual evidence:
@@ -250,6 +271,12 @@ Refine the scenes to anchor your entertaining narrative in the real visual evide
 2. Maintain high entertainment value: witty, fast-paced, and captivating.
 3. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
 4. Language: Keep the same language as the draft.
+
+CRITICAL NEGATIVE CONSTRAINTS (NO PLACEHOLDERS):
+- NEVER write placeholder, evasive, or meta descriptions in subtitles or audio cues.
+  - FORBIDDEN: "A character says an innocent line...", "Zoom on the key quote...", "Explains the double meaning..."
+  - REQUIRED: You MUST invent or quote the EXACT words verbatim (e.g., "Voix off: 'Maman, pourquoi le monsieur a une carotte dans la poche ?'").
+- Every scene's `subtitle` and `audio_cue` must contain the actual spoken text, ready to be read by TTS or an actor.
 
 Return ONLY valid JSON with this structure:
 {
@@ -267,3 +294,5 @@ Return ONLY valid JSON with this structure:
   ]
 }
 """
+
+_REFINE_SYSTEM_PROMPT = _load_prompt("scriptwriter_refine.txt", _REFINE_SYSTEM_PROMPT_DEFAULT)

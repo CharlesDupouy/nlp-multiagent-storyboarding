@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import random
 import re
 import sys
 from pathlib import Path
@@ -49,6 +50,25 @@ def parse_args() -> argparse.Namespace:
         "--no-enrich",
         action="store_true",
         help="Skip automatic title resolution via YouTube public oEmbed API.",
+    )
+    parser.add_argument(
+        "--split",
+        "-s",
+        type=int,
+        default=None,
+        help="Number of parts to split the history into (e.g. 2, 3) for generating multiple distinct video pairs.",
+    )
+    parser.add_argument(
+        "--split-mode",
+        choices=["random", "sequential"],
+        default="random",
+        help="Split method: 'random' (unbiased shuffle) or 'sequential' (chronological chunks). Default: random.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducible shuffling when split-mode is random (default: 42).",
     )
     return parser.parse_args()
 
@@ -140,6 +160,36 @@ def validate_and_clean_history(raw_data: list) -> list[dict[str, str]]:
     return cleaned_videos
 
 
+def split_history(
+    videos: list[dict[str, str]],
+    parts: int,
+    mode: str = "random",
+    seed: int = 42,
+) -> list[list[dict[str, str]]]:
+    """
+    Split a list of videos into X balanced subsets.
+    - 'random': Shuffles the list with a deterministic seed for unbiased cross-sectional sampling.
+    - 'sequential': Splits the list in original chronological order to isolate browsing sessions.
+    """
+    if parts <= 1:
+        return [list(videos)]
+
+    parts = min(parts, len(videos))
+    v_list = list(videos)
+
+    if mode == "random":
+        rng = random.Random(seed)
+        rng.shuffle(v_list)
+
+    slices: list[list[dict[str, str]]] = []
+    n = len(v_list)
+    for i in range(parts):
+        start = (i * n) // parts
+        end = ((i + 1) * n) // parts
+        slices.append(v_list[start:end])
+    return slices
+
+
 def main() -> None:
     args = parse_args()
     input_path = Path(args.input)
@@ -173,9 +223,26 @@ def main() -> None:
     print(f"\n✅ Ingestion successful!")
     print(f"   Participant: {user_slug}")
     print(f"   Videos ingested: {len(videos)}")
-    print(f"   Saved to: {out_file}")
-    print(f"\n🚀 To generate a storyboard for this participant, run:")
-    print(f"   python main.py --history {out_file}\n")
+    print(f"   Full history saved to: {out_file}")
+
+    if args.split and args.split > 1:
+        slices = split_history(videos, parts=args.split, mode=args.split_mode, seed=args.seed)
+        print(f"\n✂️  Split into {len(slices)} {args.split_mode} parts (seed={args.seed}):")
+        for idx, part in enumerate(slices, 1):
+            slice_path = out_dir / f"{user_slug}_part{idx}.json"
+            with open(slice_path, "w", encoding="utf-8") as f:
+                json.dump(part, f, indent=2, ensure_ascii=False)
+            print(f"   - Part {idx}: {len(part)} videos -> {slice_path}")
+
+        print(f"\n🚀 Ready for paired multi-agent and baseline generation:")
+        for idx in range(1, len(slices) + 1):
+            part_path = out_dir / f"{user_slug}_part{idx}.json"
+            print(f"   # Pair {idx}:")
+            print(f"   python main.py --history {part_path}")
+            print(f"   python main.py --history {part_path} --baseline")
+    else:
+        print(f"\n🚀 To generate a storyboard for this participant, run:")
+        print(f"   python main.py --history {out_file}\n")
 
 
 if __name__ == "__main__":

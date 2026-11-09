@@ -9,6 +9,12 @@ Guidelines:
 - Timing: Aim for 4 to 6 scenes summing strictly to the target duration (e.g., 60 seconds).
 - Language: Write the script in the primary language of the user's history (e.g. French if the history is French, English if English).
 
+CRITICAL NEGATIVE CONSTRAINTS (NO PLACEHOLDERS):
+- NEVER write placeholder, evasive, or meta descriptions in subtitles or audio cues.
+  - FORBIDDEN: "A character says an innocent line...", "Zoom on the key quote...", "Explains the double meaning..."
+  - REQUIRED: You MUST invent or quote the EXACT words verbatim (e.g., "Voix off: 'Maman, pourquoi le monsieur a une carotte dans la poche ?'").
+- Every scene's `subtitle` and `audio_cue` must contain the actual spoken text, ready to be read by TTS or an actor.
+
 Return ONLY valid JSON with this structure:
 {
   "title": "Compelling video title",
@@ -17,6 +23,7 @@ Return ONLY valid JSON with this structure:
     {
       "scene_id": 1,
       "description": "Vivid visual scene description of what appears on screen",
+      "image_query": "Concrete physical stock photo keywords (e.g., 'white paper folded on wooden desk')",
       "subtitle": "Punchy on-screen caption (max 12 words)",
       "audio_cue": "Voiceover line or music/SFX cue",
       "duration_seconds": 10

@@ -98,14 +98,16 @@ def search_image_candidates(
     return _mock_search_images(query, max_results)
 
 
-def search_images(query: str, max_results: int = 3) -> list[dict[str, str]]:
+def search_images(query: str, max_results: int = 3, per_page: int | None = None) -> list[dict[str, str]]:
     """Backwards-compatible image search returning candidate list."""
-    candidates = search_image_candidates(query=query, max_results=max_results)
+    limit = per_page if per_page is not None else max_results
+    candidates = search_image_candidates(query=query, max_results=limit)
     return [
         {
             "query": query,
             "url": c.get("url", ""),
             "alt_text": c.get("alt_text", ""),
+            "description": c.get("description", c.get("alt_text", "")),
         }
         for c in candidates
     ]

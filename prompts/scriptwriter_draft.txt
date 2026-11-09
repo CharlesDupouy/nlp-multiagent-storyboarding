@@ -11,6 +11,12 @@ Core Philosophy:
 - Audio cues: Charismatic voiceover lines, dynamic sound effects, or musical beats.
 - Language: Write the script in the primary language of the user's profile/history.
 
+CRITICAL NEGATIVE CONSTRAINTS (NO PLACEHOLDERS):
+- NEVER write placeholder, evasive, or meta descriptions in subtitles or audio cues.
+  - FORBIDDEN: "A character says an innocent line...", "Zoom on the key quote...", "Explains the double meaning..."
+  - REQUIRED: You MUST invent or quote the EXACT words verbatim (e.g., "Voix off: 'Maman, pourquoi le monsieur a une carotte dans la poche ?'").
+- Every scene's `subtitle` and `audio_cue` must contain the actual spoken text, ready to be read by TTS or an actor.
+
 Return ONLY valid JSON with this structure:
 {
   "title": "Engaging video title",

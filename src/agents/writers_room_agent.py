@@ -1,0 +1,162 @@
+"""
+WritersRoomAgent — Phase 2 in the Multi-Agent Pipeline.
+
+Responsibility:
+  - Takes the rich UserProfile (including investigated transcript insights).
+  - Acts as a collaborative creative writers' room.
+  - Generates 3 distinct, high-potential candidate story pitches tailored to the
+    user's natural style preference (witty banter, deep mystery, edutainment puzzle,
+    chill craft, or gaming/pop-culture lore).
+  - Does NOT lock the user into a rigid single format: adapts flexibly to their vibe.
+
+Output written to state:
+  - state.candidate_pitches: list[dict[str, Any]] (3 structured pitches)
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+from openai import OpenAI
+
+from src.agents.base_agent import BaseAgent
+from src.core.llm_client import chat_completion, extract_json
+from src.core.state import SharedState
+
+
+class WritersRoomAgent(BaseAgent):
+    """Generates 3 diverse candidate short-video pitches tailored to user tastes."""
+
+    def __init__(self, model: str, client: OpenAI) -> None:
+        super().__init__(name="WritersRoomAgent", model=model, client=client)
+
+    def run(self, state: SharedState) -> SharedState:
+        profile = state.user_profile
+        self._log(state, " Convening Writers' Room to brainstorm 3 distinct candidate pitches.")
+
+        user_prompt = _build_writers_room_prompt(profile)
+
+        raw = chat_completion(
+            client=self.client,
+            model=self.model,
+            system_prompt=_WRITERS_ROOM_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.8,
+            max_tokens=2000,
+        )
+
+        pitches_data = _parse_pitches(raw)
+        pitches = pitches_data.get("pitches", [])
+
+        # Ensure fallback pitch IDs
+        for i, p in enumerate(pitches):
+            if "pitch_id" not in p:
+                p["pitch_id"] = f"pitch{i+1}"
+
+        state.candidate_pitches = pitches
+        self._log(state, f"Developed {len(pitches)} candidate pitches:")
+        for p in pitches:
+            self._log(state, f"  [{p.get('pitch_id')}] '{p.get('title')}' (Tone: {p.get('target_tone')})")
+
+        return state
+
+
+def _build_writers_room_prompt(profile: Any) -> str:
+    insights_str = "\n".join(f"- {ins}" for ins in profile.investigated_insights) if profile.investigated_insights else "None"
+
+    return f"""\
+USER PROFILE
+============
+Interests: {', '.join(profile.interests)}
+Themes:    {', '.join(profile.themes)}
+Preferred Style / Vibe: {profile.preferred_style or 'Engaging & tailored'}
+Summary:   {profile.raw_summary}
+
+DEEP-DIVE TRANSCRIPT INSIGHTS:
+{insights_str}
+
+TASK:
+Brainstorm 3 DISTINCT, HIGH-POTENTIAL video pitches (each suitable for a 60-second Short).
+Make sure each pitch explores a DIFFERENT topic or angle from the user's profile and matches their natural style preference.
+"""
+
+
+def _parse_pitches(raw: str) -> dict:
+    try:
+        data = extract_json(raw)
+        if isinstance(data, dict):
+            return data
+        if isinstance(data, list):
+            return {"pitches": data}
+        return {"pitches": []}
+    except Exception:
+        return {"pitches": []}
+
+
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
+
+
+def _load_prompt(filename: str, default: str) -> str:
+    path = _PROMPTS_DIR / filename
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
+    return default.strip()
+
+
+_WRITERS_ROOM_SYSTEM_PROMPT_DEFAULT = """\
+You are the lead showrunner of a premier short-form video writers' room.
+Your mission is to pitch 3 DISTINCT, highly engaging 60-second video concepts tailored to the user's unique personality and watch history.
+
+Crucial Guidelines:
+1. Adapt to the user's natural style:
+   - If they love humor, comedy sketches, or couple dynamics, pitch witty, relatable concepts.
+   - If they love puzzles, math, or tech, pitch mindbending, counterintuitive curiosities.
+   - If they love nostalgia, pop culture, or gaming, pitch deep-dive lore, hidden details, or controversies.
+   - Do NOT force a single rigid format on every user.
+2. DIVERSITY across the 3 pitches:
+   - Pitch 1: Explores one major interest pillar from their profile.
+   - Pitch 2: Explores a second distinct passion or transcript insight.
+   - Pitch 3: A creative cross-over or surprising angle they wouldn't expect.
+3. Every pitch MUST have an instant 3-second hook that stops the scroll.
+4. Language: Match the primary language of the user's profile/history (e.g. French if French, English if English).
+
+Return ONLY valid JSON with this structure:
+{
+  "pitches": [
+    {
+      "pitch_id": "pitch1",
+      "title": "Punchy, irresistible video title",
+      "target_tone": "e.g. Witty & ironic / Mindbending & curious / High-energy forensic",
+      "hook_3s": "Exact visual action and opening spoken line (0-3s)",
+      "concept": "2-3 sentences explaining the core premise and conflict/revelation",
+      "core_beats": [
+        "Beat 1: The setup/provocation",
+        "Beat 2: The twist or escalation",
+        "Beat 3: The climax or takeaway"
+      ],
+      "user_alignment_reason": "Why this specific user will love this concept based on their history"
+    },
+    {
+      "pitch_id": "pitch2",
+      "title": "...",
+      "target_tone": "...",
+      "hook_3s": "...",
+      "concept": "...",
+      "core_beats": ["..."],
+      "user_alignment_reason": "..."
+    },
+    {
+      "pitch_id": "pitch3",
+      "title": "...",
+      "target_tone": "...",
+      "hook_3s": "...",
+      "concept": "...",
+      "core_beats": ["..."],
+      "user_alignment_reason": "..."
+    }
+  ]
+}
+"""
+
+_WRITERS_ROOM_SYSTEM_PROMPT = _load_prompt("writers_room.txt", _WRITERS_ROOM_SYSTEM_PROMPT_DEFAULT)

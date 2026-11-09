@@ -19,5 +19,10 @@ youtube-transcript-api>=1.2.0
 # Testing
 pytest>=8.0.0
 
+# Video generation & neural TTS
+edge-tts>=7.0.0
+Pillow>=10.0.0
+imageio-ffmpeg>=0.5.0
+
 # Optional: nicer CLI output
 rich>=13.0.0

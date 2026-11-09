@@ -54,24 +54,41 @@ except ImportError:
 # --------------------------------------------------------------------------
 # Rubric / prompts  (snapshotted into run_config.json for reproducibility)
 # --------------------------------------------------------------------------
+CRITERIA = ["relevance", "creativity", "completeness", "coherence", "visual_grounding"]
+
 METRICS = {
     "relevance": (
         "How well the storyboard fits THIS user's specific interests, as evidenced by their "
         "watch history.\n"
+        "MULTI-FACET RULE: The user's watch history contains multiple distinct topic clusters "
+        "(e.g., Math Paradoxes, 90s/2000s Animation Nostalgia, French Comedy). A storyboard is "
+        "considered RELEVANT (4–5/5) if it connects with ANY interest cluster the user seems "
+        "genuinely interested in. It does not need to be the most frequent topic in the list.\n"
+        "ANTI-REGURGITATION RULE: Merely copying or rehashing a watched video's exact premise is NOT "
+        "true personalization; true relevance requires extending the user's taste to a fresh angle.\n"
         "1 = unrelated to the user's interests.\n"
         "2 = loosely related to a broad interest category only.\n"
-        "3 = touches an interest evident in the history but in a generic way any fan could get.\n"
-        "4 = clearly built on specific interests visible in the history.\n"
+        "3 = touches an interest evident in the history but in a generic way any fan could get, "
+        "or merely rehashes an already-watched video.\n"
+        "4 = clearly built on specific interests visible in the history with a fresh angle.\n"
         "5 = builds on specific niche interests and recurring patterns in the history in a way "
-        "a generic video would not."
+        "a generic video would not, offering an unseen curiosity."
     ),
     "creativity": (
         "Novelty and freshness of the concept, angle, and execution, while still suiting the user.\n"
-        "1 = generic template; the most obvious video on the topic.\n"
-        "2 = mostly conventional with minor variation.\n"
+        "ANTI-REGURGITATION PENALTY: Check if the storyboard merely copies, rehashes, or retells "
+        "the exact topic/premise of a specific video already in the user's history (e.g., user watched "
+        "'How Many Folds To Reach The Moon?' and the storyboard is 'Paper folding to the Moon'; or user "
+        "watched 'How to make croissants from scratch' and the storyboard is '10-minute croissant hack'). "
+        "If so:\n"
+        "- CAP Creativity at 2/5 (it is a remake, not an original creation).\n"
+        "- Do NOT reward this as high personalization; true relevance requires extending the user's "
+        "taste to a FRESH angle or an UNSEEN curiosity.\n"
+        "1 = generic template; the most obvious video on the topic, or direct copy of a watched video.\n"
+        "2 = mostly conventional with minor variation, or a remake/rehash of a watched video (CAPPED at 2/5).\n"
         "3 = some original touches but a predictable structure.\n"
         "4 = a distinctive angle or structure that feels fresh.\n"
-        "5 = surprising, memorable concept that still clearly fits the user."
+        "5 = surprising, memorable concept with high novelty that still clearly fits the user."
     ),
     "completeness": (
         "Whether the storyboard fully specifies a producible short video: scene descriptions, "
@@ -91,18 +108,65 @@ METRICS = {
         "4 = good flow with a clear hook and ending.\n"
         "5 = tight, engaging arc; every element supports the whole."
     ),
+    "visual_grounding": (
+        "How faithfully the retrieved photo asset ('Visual Asset Photo' description/alt-text "
+        "from the photo link) matches the scene's desired visual description.\n"
+        "1 = completely contradictory or irrelevant photo asset (e.g., photo of a basketball court "
+        "for a scene describing writing with a pen).\n"
+        "2 = loosely or tangentially related only (e.g., generic street view when a specific food dish is described).\n"
+        "3 = acceptable topical match, but misses key specific subjects or actions depicted in the scene.\n"
+        "4 = strong visual match: the photo asset directly depicts the primary subject and setting.\n"
+        "5 = exceptional visual-narrative alignment: the photo asset precisely captures the exact subject, "
+        "atmosphere, and physical focus described in the storyboard."
+    ),
 }
 
 ABS_SYSTEM = (
     "You are a strict, impartial evaluator of short-video storyboards. Use the full range of "
     "the scales and avoid defaulting to middle or high scores. Do NOT reward length or "
-    "verbosity; judge quality only. Do not guess which system produced the storyboard."
+    "verbosity; judge quality only. Do not guess which system produced the storyboard.\n\n"
+    "MULTI-FACET RELEVANCE DIRECTIVE:\n"
+    "The user's watch history contains multiple distinct topic clusters (e.g., Math Paradoxes, "
+    "90s/2000s Animation Nostalgia, French Comedy). A storyboard is considered RELEVANT (4–5/5) "
+    "if it connects with ANY interest cluster the user seems genuinely interested in. It does not "
+    "need to be the most frequent topic in the list.\n\n"
+    "ANTI-REGURGITATION PENALTY:\n"
+    "Check if the storyboard merely copies, rehashes, or retells the exact topic/premise of a "
+    "specific video already in the user's history (e.g., user watched 'How Many Folds To Reach The Moon?' "
+    "and the storyboard is 'Paper folding to the Moon'; or user watched 'How to make croissants from scratch' "
+    "and the storyboard is '10-minute croissant hack'). If so:\n"
+    "- CAP Creativity at 2/5 (it is a remake, not an original creation).\n"
+    "- Do NOT reward this as high personalization; true relevance requires extending the user's "
+    "taste to a FRESH angle or an UNSEEN curiosity.\n\n"
+    "VISUAL-NARRATIVE GROUNDING EVALUATION:\n"
+    "For each scene, check the 'Visual Asset Photo' (which contains the description and alt-text "
+    "retrieved from the photo link) against the scene's desired 'Visual' description. "
+    "Score high (4–5/5) if the retrieved photo accurately illustrates the specific physical subject "
+    "and setting; score low (1–2/5) if the photo is generic, tangential, or contradicts the scene."
 )
 
 PAIR_SYSTEM = (
     "You are a strict, impartial evaluator comparing two short-video storyboards written for "
-    "the same user. Do NOT reward length or verbosity. The order in which the storyboards are "
-    "shown carries no information."
+    "the same user. Evaluate each dimension independently. Do NOT reward length or verbosity. "
+    "The order in which the storyboards are shown carries no information.\n\n"
+    "MULTI-FACET RELEVANCE DIRECTIVE:\n"
+    "The user's watch history contains multiple distinct topic clusters (e.g., Math Paradoxes, "
+    "90s/2000s Animation Nostalgia, French Comedy). A storyboard is considered RELEVANT if it "
+    "connects with ANY interest cluster the user seems genuinely interested in. It does not need "
+    "to be the most frequent topic in the list.\n\n"
+    "ANTI-REGURGITATION PENALTY:\n"
+    "Check if a storyboard merely copies, rehashes, or retells the exact topic/premise of a "
+    "specific video already in the user's history (e.g., user watched 'How Many Folds To Reach The Moon?' "
+    "and the storyboard is 'Paper folding to the Moon'; or user watched 'How to make croissants from scratch' "
+    "and the storyboard is '10-minute croissant hack'). If so, heavily penalize it: it is a remake/rerun, "
+    "not an original creation. A user does NOT want to be shown a video they have already watched; "
+    "true recommendation and personalization requires introducing a fresh angle, unseen curiosity, "
+    "or novel extension of their taste.\n\n"
+    "VISUAL-NARRATIVE GROUNDING EVALUATION:\n"
+    "For each scene, evaluate how well the 'Visual Asset Photo' (which provides the real description "
+    "and alt-text retrieved from the photo link) matches the scene's desired 'Visual' description. "
+    "Favor the storyboard whose retrieved photo assets faithfully depict the specific physical scenes "
+    "over one with uncurated, generic, or mismatched stock photos."
 )
 
 
@@ -145,13 +209,43 @@ Titles of YouTube Shorts this user recently watched:
 {sb_b}
 </storyboard_B>
 
-Question: which video would this specific user prefer to watch in their feed?
-Consider relevance to the user's niche interests, creativity, completeness and coherence.
-Choose "tie" only if they are genuinely indistinguishable.
+Evaluate and compare the two storyboards across each of the 5 criteria below, plus pick an overall winner.
+For each criterion, assign a grade on 5 (1 to 5 integer scale) to Storyboard A and Storyboard B, and declare the winner ("A", "B", or "tie"):
 
-Write 2-3 sentences of reasoning FIRST, then give the verdict.
-Return ONLY valid JSON, no markdown fences:
-{{"reasoning": "...", "winner": "A" | "B" | "tie"}}"""
+1. relevance: How well the storyboard connects to ANY genuine interest cluster in the watch history (Multi-Facet Relevance).
+2. creativity: Concept novelty, distinctive hook/angle. Penalize direct remakes/rehashes of watched videos (Anti-Regurgitation Penalty: CAP at 2/5).
+3. completeness: Full specification of visual descriptions, punchy subtitles, and audio cues for every scene (1-5).
+4. coherence: Narrative flow, progression, hook-to-payoff arc (1-5).
+5. visual_grounding: How faithfully the retrieved visual assets ('Visual Asset Photo') illustrate each scene's desired visual description (1-5).
+Overall: Which video would this specific user prefer to watch in their feed?
+
+Choose "tie" for any dimension only if they are genuinely indistinguishable.
+
+Write 2-4 sentences of comparative reasoning FIRST, then declare scores on 5 and winners.
+Return ONLY valid JSON, no markdown fences, in this exact format:
+{{
+  "scores_A": {{
+    "relevance": <1-5 integer>,
+    "creativity": <1-5 integer>,
+    "completeness": <1-5 integer>,
+    "coherence": <1-5 integer>,
+    "visual_grounding": <1-5 integer>
+  }},
+  "scores_B": {{
+    "relevance": <1-5 integer>,
+    "creativity": <1-5 integer>,
+    "completeness": <1-5 integer>,
+    "coherence": <1-5 integer>,
+    "visual_grounding": <1-5 integer>
+  }},
+  "relevance_winner": "A" | "B" | "tie",
+  "creativity_winner": "A" | "B" | "tie",
+  "completeness_winner": "A" | "B" | "tie",
+  "coherence_winner": "A" | "B" | "tie",
+  "visual_grounding_winner": "A" | "B" | "tie",
+  "overall_winner": "A" | "B" | "tie",
+  "reasoning": "..."
+}}"""
 
 
 # --------------------------------------------------------------------------
@@ -163,14 +257,44 @@ def history_key(videos) -> str:
 
 
 def render_storyboard(data: dict) -> str:
-    """Neutral text view: ONLY fields both systems share. No pitches/notes/profile/images/log."""
+    """Neutral text view: renders title, narrative, scenes, and visual assets."""
     sb = data.get("storyboard", {})
+    img_ctx = data.get("image_context", {})
+    img_map = {img.get("image_id"): img for img in img_ctx.get("images", [])} if isinstance(img_ctx, dict) else {}
+
     lines = [f"Title: {sb.get('title', '')}", f"Concept: {sb.get('overall_narrative', '')}", "", "Scenes:"]
     for i, s in enumerate(sb.get("scenes", []), 1):
-        lines.append(f"Scene {s.get('scene_id', i)} ({s.get('duration_seconds', '?')}s)")
-        lines.append(f"  Visual: {s.get('description', '')}")
-        lines.append(f"  Subtitle: {s.get('subtitle', '')}")
-        lines.append(f"  Audio: {s.get('audio_cue', '')}")
+        idx = s.get("scene_id", i)
+        dur = s.get("duration_seconds", "?")
+        desc = s.get("description", "")
+        subtitle = s.get("subtitle", "")
+        audio = s.get("audio_cue", "")
+
+        # Extract metadata retrieved strictly from the image link / source website
+        ref = s.get("image_ref")
+        photo_desc = s.get("image_description")
+        photo_alt = s.get("image_alt_text")
+        if ref and ref in img_map:
+            if not photo_desc:
+                photo_desc = img_map[ref].get("description")
+            if not photo_alt:
+                photo_alt = img_map[ref].get("alt_text")
+
+        parts = []
+        if photo_desc and str(photo_desc).strip():
+            parts.append(str(photo_desc).strip())
+        if photo_alt and str(photo_alt).strip():
+            cleaned_alt = re.sub(r"\s*\(Photo by [^)]+\)", "", str(photo_alt).strip())
+            if cleaned_alt and (not photo_desc or cleaned_alt.lower() != str(photo_desc).strip().lower()):
+                parts.append(cleaned_alt)
+        image_desc = " - ".join(parts) if parts else None
+
+        lines.append(f"Scene {idx} ({dur}s):")
+        lines.append(f"  Visual: {desc}")
+        if image_desc:
+            lines.append(f"  Visual Asset Photo: {image_desc}")
+        lines.append(f"  Subtitle: {subtitle}")
+        lines.append(f"  Audio: {audio}")
     return "\n".join(lines)
 
 
@@ -311,7 +435,13 @@ class StubJudge:
     def __call__(self, system, prompt, retries=0):
         h = int(hashlib.sha1(prompt.encode()).hexdigest(), 16)
         if "<storyboard_A>" in prompt:
-            return json.dumps({"reasoning": "stub", "winner": ["A", "B", "tie"][h % 3]})
+            choices = ["A", "B", "tie"]
+            res = {f"{c}_winner": choices[(h >> (i * 2)) % 3] for i, c in enumerate(CRITERIA)}
+            res["overall_winner"] = choices[h % 3]
+            res["scores_A"] = {c: 1 + (h >> (i * 2)) % 5 for i, c in enumerate(CRITERIA)}
+            res["scores_B"] = {c: 1 + ((h >> (i * 2 + 1)) ^ 3) % 5 for i, c in enumerate(CRITERIA)}
+            res["reasoning"] = "stub pairwise reasoning"
+            return json.dumps(res)
         return json.dumps({m: {"reasoning": "stub", "score": 1 + (h >> (i * 3)) % 5}
                            for i, m in enumerate(METRICS)})
 
@@ -405,22 +535,80 @@ def run_absolute(judge, cache, model, temp, uid, system_name, history, sb_text, 
 def run_pairwise(judge, cache, model, temp, uid, history, sb_ag, sb_bl, run, order):
     a, b = (sb_ag, sb_bl) if order == "AB" else (sb_bl, sb_ag)
     prompt = build_pair_prompt(history, a, b)
-    key = make_key("pair", model, temp, PAIR_SYSTEM, prompt, run)
+    key = make_key("pair_v4", model, temp, PAIR_SYSTEM, prompt, run)
     rec = cache.get(key)
 
     def parse(d):
-        w = str(d["winner"]).strip().lower()
-        if w not in ("a", "b", "tie"):
-            raise ValueError(f"bad winner {w}")
-        return {"w": w, "reasoning": d.get("reasoning", "")}
+        out = {}
+        scores_a, scores_b = {}, {}
+        raw_sa = d.get("scores_A", {}) if isinstance(d.get("scores_A"), dict) else {}
+        raw_sb = d.get("scores_B", {}) if isinstance(d.get("scores_B"), dict) else {}
+
+        def parse_score(val):
+            try:
+                sc = round(float(val))
+                return max(1, min(5, sc))
+            except (ValueError, TypeError):
+                return None
+
+        for c in CRITERIA:
+            sc_a = parse_score(raw_sa.get(c))
+            sc_b = parse_score(raw_sb.get(c))
+            scores_a[c] = sc_a
+            scores_b[c] = sc_b
+
+            k = f"{c}_winner"
+            val = str(d.get(k, "")).strip().lower()
+            if val not in ("a", "b", "tie"):
+                if sc_a is not None and sc_b is not None:
+                    val = "a" if sc_a > sc_b else ("b" if sc_b > sc_a else "tie")
+                else:
+                    val = str(d.get("winner", "tie")).strip().lower()
+                    if val not in ("a", "b", "tie"):
+                        val = "tie"
+            out[k] = val
+
+        overall = str(d.get("overall_winner", d.get("winner", "tie"))).strip().lower()
+        if overall not in ("a", "b", "tie"):
+            overall = "tie"
+        out["overall_winner"] = overall
+        out["scores_A"] = scores_a
+        out["scores_B"] = scores_b
+        out["reasoning"] = d.get("reasoning", "")
+        return out
 
     if not rec:
         rec = call_parsed(judge, PAIR_SYSTEM, prompt, parse)
         cache.put(key, rec)
-    w = rec["w"]
-    winner = "tie" if w == "tie" else ("agentic" if (w == "a") == (order == "AB") else "baseline")
-    return {"type": "pair", "user": uid, "run": run, "order": order, "winner": winner,
-            "reasoning": rec["reasoning"]}
+
+    def map_choice(w: str) -> str:
+        if w == "tie":
+            return "tie"
+        return "agentic" if (w == "a") == (order == "AB") else "baseline"
+
+    criteria_winners = {c: map_choice(rec.get(f"{c}_winner", "tie")) for c in CRITERIA}
+    overall_winner = map_choice(rec.get("overall_winner", "tie"))
+
+    if order == "AB":
+        agentic_scores = rec.get("scores_A", {})
+        baseline_scores = rec.get("scores_B", {})
+    else:
+        agentic_scores = rec.get("scores_B", {})
+        baseline_scores = rec.get("scores_A", {})
+
+    return {
+        "type": "pair",
+        "user": uid,
+        "run": run,
+        "order": order,
+        "winner": overall_winner,
+        "overall_winner": overall_winner,
+        "criteria_winners": criteria_winners,
+        "agentic_scores": agentic_scores,
+        "baseline_scores": baseline_scores,
+        "raw_choices": {f"{c}_winner": rec.get(f"{c}_winner") for c in CRITERIA} | {"overall_winner": rec.get("overall_winner")},
+        "reasoning": rec.get("reasoning", ""),
+    }
 
 
 # --------------------------------------------------------------------------
@@ -460,10 +648,10 @@ def summarize(abs_recs, pair_recs, users, texts, out_dir, human_csv):
             per.setdefault((r["system"], m), {}).setdefault(r["user"], []).append(v["score"])
     per = {k: {u: statistics.mean(v) for u, v in d.items()} for k, d in per.items()}
 
-    log("=" * 74)
+    log("=" * 78)
     log(f"ABSOLUTE SCORES (1-5), n_users = {len(users)}")
-    log("=" * 74)
-    log(f"{'metric':<14}{'agentic':>9}{'baseline':>10}{'delta':>8}{'95% CI (boot)':>20}{'wilcoxon p':>12}")
+    log("=" * 78)
+    log(f"{'metric':<18}{'agentic':>9}{'baseline':>10}{'delta':>8}{'95% CI (boot)':>20}{'wilcoxon p':>12}")
     rows = []
     for m in METRICS:
         ag, bl = per.get(("agentic", m), {}), per.get(("baseline", m), {})
@@ -474,61 +662,123 @@ def summarize(abs_recs, pair_recs, users, texts, out_dir, human_csv):
         diffs = [x - y for x, y in zip(a, b)]
         lo, hi = bootstrap_ci(diffs) if len(diffs) > 1 else (float("nan"),) * 2
         p = wilcoxon_p(a, b) if len(diffs) > 1 else None
-        log(f"{m:<14}{statistics.mean(a):>9.2f}{statistics.mean(b):>10.2f}{statistics.mean(diffs):>+8.2f}"
+        log(f"{m:<18}{statistics.mean(a):>9.2f}{statistics.mean(b):>10.2f}{statistics.mean(diffs):>+8.2f}"
             f"{f'[{lo:+.2f}, {hi:+.2f}]':>20}{(f'{p:.4f}' if p is not None else 'n/a'):>12}")
         rows.append({"metric": m, "agentic_mean": statistics.mean(a), "baseline_mean": statistics.mean(b),
                      "delta": statistics.mean(diffs), "ci_lo": lo, "ci_hi": hi, "wilcoxon_p": p, "n": len(common)})
 
     log()
-    log("=" * 74)
-    log("PAIRWISE PREFERENCE (both orders judged)")
-    log("=" * 74)
+    log("=" * 98)
+    log("PAIRWISE EVALUATION & PREFERENCE BREAKDOWN (grades on 5 + win rates, both orders judged)")
+    log("=" * 98)
+    log(f"{'dimension':<18}{'ag_grade':>9}{'bl_grade':>9}{'delta':>8}{'agentic':>8}{'baseline':>9}{'tie':>6}{'win_rate (excl)':>18}{'consistency':>13}")
+    log("-" * 98)
+
     by_user = {}
     for r in pair_recs:
         by_user.setdefault(r["user"], []).append(r)
-    user_winner, consistent, n_pairs = {}, 0, 0
-    votes = {"agentic": 0, "baseline": 0, "tie": 0}
-    for u, recs in by_user.items():
-        for r in recs:
-            votes[r["winner"]] += 1
-        by_run = {}
-        for r in recs:
-            by_run.setdefault(r["run"], {})[r["order"]] = r["winner"]
-        for d in by_run.values():
-            if len(d) == 2:
-                n_pairs += 1
-                consistent += d["AB"] == d["BA"]
-        sc = statistics.mean(1.0 if r["winner"] == "agentic" else 0.5 if r["winner"] == "tie" else 0.0
-                             for r in recs)
-        user_winner[u] = "agentic" if sc > 0.5 else "baseline" if sc < 0.5 else "tie"
-    log(f"Votes: agentic {votes['agentic']} | baseline {votes['baseline']} | tie {votes['tie']}")
-    dec = votes["agentic"] + votes["baseline"]
-    if dec:
-        log(f"Agentic win rate (excluding ties): {votes['agentic'] / dec:.1%}")
-        try:
-            from scipy.stats import binomtest
 
-            log(f"Sign test p-value: {binomtest(votes['agentic'], dec, 0.5).pvalue:.4f}")
-        except Exception:
-            pass
-    if n_pairs:
-        log(f"Position consistency (same verdict in both orders): {consistent / n_pairs:.1%}  "
-            "<- low values mean the pairwise verdicts are unreliable")
+    dims_all = list(CRITERIA) + ["overall"]
+    pairwise_rows = []
+
+    for dim in dims_all:
+        dim_votes = {"agentic": 0, "baseline": 0, "tie": 0}
+        ag_scores_list, bl_scores_list = [], []
+        n_pairs, consistent = 0, 0
+        for u, recs in by_user.items():
+            by_run = {}
+            for r in recs:
+                w = r.get("overall_winner", r.get("winner", "tie")) if dim == "overall" else r.get("criteria_winners", {}).get(dim, "tie")
+                dim_votes[w] += 1
+                by_run.setdefault(r["run"], {})[r["order"]] = w
+
+                # Collect grades on 5
+                if dim == "overall":
+                    scs_ag = [v for v in r.get("agentic_scores", {}).values() if v is not None]
+                    scs_bl = [v for v in r.get("baseline_scores", {}).values() if v is not None]
+                    if scs_ag:
+                        ag_scores_list.append(statistics.mean(scs_ag))
+                    if scs_bl:
+                        bl_scores_list.append(statistics.mean(scs_bl))
+                else:
+                    s_ag = r.get("agentic_scores", {}).get(dim)
+                    s_bl = r.get("baseline_scores", {}).get(dim)
+                    if s_ag is not None:
+                        ag_scores_list.append(s_ag)
+                    if s_bl is not None:
+                        bl_scores_list.append(s_bl)
+
+            for d in by_run.values():
+                if len(d) == 2:
+                    n_pairs += 1
+                    consistent += (d["AB"] == d["BA"])
+
+        total = dim_votes["agentic"] + dim_votes["baseline"] + dim_votes["tie"]
+        dec = dim_votes["agentic"] + dim_votes["baseline"]
+        wr = (dim_votes["agentic"] / dec) if dec > 0 else 0.0
+        cons_rate = (consistent / n_pairs) if n_pairs > 0 else 1.0
+
+        mean_ag_score = statistics.mean(ag_scores_list) if ag_scores_list else None
+        mean_bl_score = statistics.mean(bl_scores_list) if bl_scores_list else None
+        delta_score = (mean_ag_score - mean_bl_score) if (mean_ag_score is not None and mean_bl_score is not None) else None
+
+        p_val = None
+        if dec > 0:
+            try:
+                from scipy.stats import binomtest
+                p_val = float(binomtest(dim_votes["agentic"], dec, 0.5).pvalue)
+            except Exception:
+                pass
+
+        disp_dim = "OVERALL" if dim == "overall" else dim
+        ag_sc_str = f"{mean_ag_score:.2f}" if mean_ag_score is not None else "n/a"
+        bl_sc_str = f"{mean_bl_score:.2f}" if mean_bl_score is not None else "n/a"
+        delta_str = f"{delta_score:+.2f}" if delta_score is not None else "n/a"
+
+        log(f"{disp_dim:<18}{ag_sc_str:>9}{bl_sc_str:>9}{delta_str:>8}"
+            f"{dim_votes['agentic']:>8}{dim_votes['baseline']:>9}{dim_votes['tie']:>6}"
+            f"{(f'{wr:.1%}' if dec > 0 else 'n/a'):>18}{cons_rate:>13.1%}")
+
+        pairwise_rows.append({
+            "dimension": dim,
+            "agentic_grade_on_5": ag_sc_str,
+            "baseline_grade_on_5": bl_sc_str,
+            "grade_delta": delta_str,
+            "agentic_wins": dim_votes["agentic"],
+            "baseline_wins": dim_votes["baseline"],
+            "ties": dim_votes["tie"],
+            "total_calls": total,
+            "agentic_win_rate": f"{wr:.3f}" if dec > 0 else "n/a",
+            "position_consistency": f"{cons_rate:.3f}" if n_pairs > 0 else "1.000",
+            "binom_p_value": f"{p_val:.4f}" if p_val is not None else "n/a",
+        })
+
+    log("=" * 98)
+
+    user_winner = {}
+    for u, recs in by_user.items():
+        sc = statistics.mean(
+            1.0 if r.get("overall_winner", r.get("winner")) == "agentic"
+            else 0.5 if r.get("overall_winner", r.get("winner")) == "tie"
+            else 0.0
+            for r in recs
+        )
+        user_winner[u] = "agentic" if sc > 0.5 else "baseline" if sc < 0.5 else "tie"
     uw = list(user_winner.values())
-    log(f"Per-user majority: agentic {uw.count('agentic')} | baseline {uw.count('baseline')} | tie {uw.count('tie')}")
+    log(f"Per-user majority (overall): agentic {uw.count('agentic')} | baseline {uw.count('baseline')} | tie {uw.count('tie')}")
 
     log()
-    log("=" * 74)
+    log("=" * 78)
     log("LENGTH CHECK (verbosity-bias diagnostic)")
-    log("=" * 74)
+    log("=" * 78)
     for s in ("agentic", "baseline"):
         log(f"{s:<10} mean words in judged text: {statistics.mean(len(texts[(u, s)].split()) for u in users):.0f}")
 
     if human_csv:
         log()
-        log("=" * 74)
+        log("=" * 78)
         log("JUDGE vs HUMAN AGREEMENT")
-        log("=" * 74)
+        log("=" * 78)
         with open(human_csv, newline="", encoding="utf-8") as f:
             human = {r["user_id"].strip(): r["winner"].strip().lower() for r in csv.DictReader(f)}
         pairs = [(user_winner[u], h) for u, h in human.items()
@@ -537,6 +787,11 @@ def summarize(abs_recs, pair_recs, users, texts, out_dir, human_csv):
             f"{sum(j == h for j, h in pairs) / len(pairs):.1%}" if pairs else "No overlapping decisive users.")
 
     (out_dir / "summary.txt").write_text("\n".join(lines), encoding="utf-8")
+    if pairwise_rows:
+        with (out_dir / "summary.csv").open("w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=list(pairwise_rows[0].keys()))
+            w.writeheader()
+            w.writerows(pairwise_rows)
     if rows:
         with (out_dir / "summary_absolute.csv").open("w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=list(rows[0]))
@@ -570,6 +825,8 @@ def main():
     ap.add_argument("--skip-pairwise", action="store_true")
     ap.add_argument("--human-votes", type=Path, default=None, help="CSV: user_id,winner(agentic|baseline).")
     ap.add_argument("--price-in", type=float, default=None, help="USD per 1M input tokens (cost estimate).")
+    ap.add_argument("--compare", nargs=2, metavar=("A", "B"), type=Path, default=None,
+                    help="Compare two specific storyboard JSON files side-by-side.")
     ap.add_argument("--price-out", type=float, default=None, help="USD per 1M output tokens.")
     ap.add_argument("--dry-run", action="store_true", help="Fake judge, no API calls.")
     args = ap.parse_args()
@@ -581,7 +838,36 @@ def main():
     if args.dry_run:
         args.model = "dry-run"
 
-    items = load_items(args.storyboards, args.history_dir, args.run_ids, args.max_history)
+    if args.compare:
+        path_a, path_b = args.compare
+        with open(path_a, encoding="utf-8") as f:
+            data_a = json.load(f)
+        with open(path_b, encoding="utf-8") as f:
+            data_b = json.load(f)
+
+        # Detect which is baseline vs agentic
+        is_a_base = "baseline" in str(path_a).lower() or "baseline" in str(data_a.get("run_id", "")).lower()
+        is_b_base = "baseline" in str(path_b).lower() or "baseline" in str(data_b.get("run_id", "")).lower()
+
+        if is_a_base and not is_b_base:
+            agentic_data, baseline_data = data_b, data_a
+            agentic_id, baseline_id = path_b.stem, path_a.stem
+        else:
+            agentic_data, baseline_data = data_a, data_b
+            agentic_id, baseline_id = path_a.stem, path_b.stem
+
+        history_videos = (agentic_data.get("user_history", {}).get("videos")
+                          or baseline_data.get("user_history", {}).get("videos")
+                          or [])
+        items = {
+            "comparison": {
+                "agentic": (agentic_id, agentic_data),
+                "baseline": (baseline_id, baseline_data),
+                "history": render_history(history_videos, args.max_history),
+            }
+        }
+    else:
+        items = load_items(args.storyboards, args.history_dir, args.run_ids, args.max_history)
     users = sorted(items)[: args.limit] if args.limit else sorted(items)
     if not users:
         sys.exit("No user with BOTH an agentic and a baseline storyboard on the same watch history.")
@@ -646,6 +932,33 @@ def main():
     print(f"\nTokens this invocation: {USAGE['in']:,} in / {USAGE['out']:,} out over {USAGE['calls']} calls"
           + (f" (~${cost:.4f})" if cost is not None else "  (pass --price-in/--price-out for a $ estimate)"))
     print(f"Wrote results to {run_dir}/  -> log tokens/cost in docs/project_tracker.md")
+
+    if args.compare:
+        print("\n================ SIDE-BY-SIDE COMPARISON ================")
+        print(f"Agentic ({agentic_id}) vs Baseline ({baseline_id})\n")
+        print("[ABSOLUTE GRADES (1-5)]")
+        for rec in abs_recs:
+            print(f"[{rec['system'].upper()}] Scores (1-5):")
+            for m in METRICS:
+                entry = rec['scores'].get(m, {})
+                print(f"  - {m.title()}: {entry.get('score', '?')}/5 | {entry.get('reasoning', '')}")
+            print()
+        if pair_recs:
+            print("Pairwise Verdicts & Grades on 5 (both A/B orders judged for position debiasing):")
+            for p in pair_recs:
+                print(f"  - Order {p.get('order')}: Overall Winner = {p.get('overall_winner', p.get('winner')).upper()}")
+                cw = p.get("criteria_winners", {})
+                ag_sc = p.get("agentic_scores", {})
+                bl_sc = p.get("baseline_scores", {})
+                if cw:
+                    for d in CRITERIA:
+                        w = cw.get(d, "tie").upper()
+                        s_ag = ag_sc.get(d)
+                        s_bl = bl_sc.get(d)
+                        score_info = f" [Agentic: {s_ag}/5 vs Baseline: {s_bl}/5]" if s_ag is not None and s_bl is not None else ""
+                        print(f"      * {d:<18}: {w:<8}{score_info}")
+                print(f"    Reasoning: {p.get('reasoning')}")
+        print("=========================================================\n")
 
 
 if __name__ == "__main__":

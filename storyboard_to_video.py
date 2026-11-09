@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
 storyboard_to_video.py
-Turn a storyboard JSON file into a simple slideshow video with burned-in
-subtitles and robotic (offline) text-to-speech.
+Turn a storyboard JSON file into a slideshow video sketch with burned-in
+subtitles and neural Edge-TTS voiceover.
 
 Usage:
     python storyboard_to_video.py storyboard.json -o out.mp4
-    python storyboard_to_video.py storyboard.json --lang fr --keep-temp
+    python storyboard_to_video.py storyboard.json --lang fr --voice fr-FR-HenriNeural
 
 Requirements:
-    - ffmpeg on PATH
-    - pip install pillow pyttsx3
-    - Linux only: sudo apt install espeak-ng   (pyttsx3 uses it as its engine)
-      (Windows uses SAPI5, macOS uses NSSpeechSynthesizer: nothing extra to install)
+    - ffmpeg on PATH (or pip install imageio-ffmpeg)
+    - pip install edge-tts pillow
 """
 
 import argparse
@@ -174,9 +172,40 @@ def make_silence(path, seconds):
 
 
 def audio_duration(path):
-    r = run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=nw=1:nokey=1", str(path)])
-    return float(r.stdout.strip())
+    if shutil.which("ffprobe"):
+        try:
+            r = run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                     "-of", "default=nw=1:nokey=1", str(path)])
+            return float(r.stdout.strip())
+        except Exception:
+            pass
+
+    # Fallback directly via ffmpeg without ffprobe
+    r = subprocess.run(["ffmpeg", "-i", str(path), "-f", "null", "-"], capture_output=True, text=True)
+    m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", r.stderr)
+    if m:
+        h, mn, s = m.groups()
+        return int(h) * 3600 + int(mn) * 60 + float(s)
+
+    if str(path).lower().endswith(".wav"):
+        try:
+            import wave
+            with wave.open(str(path), "rb") as wf:
+                return wf.getnframes() / float(wf.getframerate())
+        except Exception:
+            pass
+
+    raise RuntimeError(f"Could not determine audio duration for: {path}")
+
+
+# Default neural Edge-TTS voices by language
+DEFAULT_EDGE_VOICES = {
+    "fr": "fr-FR-HenriNeural",           # Rich, expressive French male voice
+    "en": "en-US-ChristopherNeural",     # Engaging, conversational English voice
+    "es": "es-ES-AlvaroNeural",          # Spanish
+    "de": "de-DE-ConradNeural",          # German
+    "it": "it-IT-DiegoNeural",           # Italian
+}
 
 
 # Run in a separate process for every utterance: pyttsx3's SAPI5 engine on Windows
@@ -208,21 +237,51 @@ _LOCALES = {"fr": "fr-FR", "en": "en-US", "es": "es-ES", "de": "de-DE", "it": "i
 
 
 class TTS:
-    def __init__(self, lang="fr", rate=170, backend="auto", timeout=40):
-        self.lang, self.rate, self.timeout = lang, rate, timeout
+    def __init__(self, lang="fr", rate=170, backend="auto", voice=None, timeout=40):
+        self.lang, self.rate, self.voice, self.timeout = lang, rate, voice, timeout
         self.exe = shutil.which("espeak-ng") or shutil.which("espeak")
         self.powershell = shutil.which("powershell") if sys.platform == "win32" else None
+
         if backend == "auto":
             try:
-                import pyttsx3  # noqa: F401
-                backend = "pyttsx3"
+                import edge_tts  # noqa: F401
+                backend = "edge"
             except ImportError:
-                backend = "espeak" if self.exe else ("powershell" if self.powershell else None)
-        if backend is None:
-            raise RuntimeError("No TTS engine found. Run: pip install pyttsx3")
-        if backend == "espeak" and not self.exe:
-            raise RuntimeError("espeak-ng not found on PATH")
+                try:
+                    import pyttsx3  # noqa: F401
+                    backend = "pyttsx3"
+                except ImportError:
+                    backend = "espeak" if self.exe else ("powershell" if self.powershell else None)
+
+        if backend in ("edge", "edge-tts", "edgetts"):
+            backend = "edge"
+        elif backend == "pyttsx3":
+            backend = "pyttsx3"
+        elif backend == "espeak":
+            backend = "espeak"
+        elif backend == "powershell":
+            backend = "powershell"
+        elif backend == "silent":
+            backend = "silent"
+        else:
+            raise RuntimeError(f"Unknown or unavailable TTS backend '{backend}'")
+
         self.backend = backend
+
+    def _edge(self, text, raw):
+        import asyncio
+        import edge_tts
+
+        voice = self.voice or DEFAULT_EDGE_VOICES.get(self.lang[:2].lower(), "fr-FR-HenriNeural")
+        # Translate speaking rate (words/min, baseline ~160) to edge-tts percent format e.g. "+5%"
+        pct = round((self.rate - 160) / 160 * 100)
+        rate_str = f"{pct:+d}%"
+
+        async def _synth():
+            comm = edge_tts.Communicate(text, voice=voice, rate=rate_str)
+            await comm.save(str(raw))
+
+        asyncio.run(_synth())
 
     def _pyttsx3(self, text, raw):
         subprocess.run([sys.executable, "-c", _PYTTSX3_WORKER, text, str(raw), str(self.rate), self.lang],
@@ -243,10 +302,23 @@ class TTS:
         if not text.strip() or self.backend == "silent":
             make_silence(out_wav, 0.1)
             return
-        raw = Path(out_wav).with_suffix(".raw.wav")
+
+        raw = Path(out_wav).with_suffix(".raw.audio")
         attempts = [getattr(self, "_" + self.backend)]
-        if self.powershell and self.backend != "powershell":
+
+        # Graceful fallbacks if primary backend encounters network/local error
+        if self.backend == "edge":
+            try:
+                import pyttsx3  # noqa: F401
+                attempts.append(self._pyttsx3)
+            except ImportError:
+                if self.exe:
+                    attempts.append(self._espeak)
+                elif self.powershell:
+                    attempts.append(self._powershell)
+        elif self.powershell and self.backend != "powershell":
             attempts.append(self._powershell)       # Windows fallback
+
         last_err = None
         for fn in attempts:
             raw.unlink(missing_ok=True)
@@ -262,7 +334,9 @@ class TTS:
             print(f"  ! {last_err}; trying fallback" if fn is not attempts[-1] else "")
         else:
             raise RuntimeError(last_err)
+
         run(["ffmpeg", "-y", "-i", str(raw), "-ar", str(SAMPLE_RATE), "-ac", "2", str(out_wav)])
+        raw.unlink(missing_ok=True)
         raw.unlink(missing_ok=True)
 
 
@@ -318,6 +392,8 @@ def main():
     ap.add_argument("storyboard", help="path to the storyboard JSON")
     ap.add_argument("-o", "--output", default="outputs/video/output.mp4")
     ap.add_argument("--lang", default="fr", help="TTS language code (default: fr)")
+    ap.add_argument("--voice", default=None,
+                    help="Specific TTS voice (e.g. 'fr-FR-HenriNeural', 'en-US-ChristopherNeural'). Auto-selected if omitted.")
     ap.add_argument("--rate", type=int, default=170, help="TTS speaking rate (words/min)")
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720, help="use 1920 x 1080 for vertical shorts, etc.")
@@ -327,18 +403,30 @@ def main():
                     help="use duration_seconds from the storyboard instead of the speech length")
     ap.add_argument("--raw-audio", action="store_true",
                     help="read audio_cue verbatim (including 'VOIX :' / 'SFX :' text)")
-    ap.add_argument("--tts-backend", choices=["auto", "pyttsx3", "espeak", "powershell", "silent"], default="auto")
+    ap.add_argument("--tts-backend", choices=["auto", "edge", "pyttsx3", "espeak", "powershell", "silent"], default="auto")
     ap.add_argument("--keep-temp", action="store_true")
     args = ap.parse_args()
 
-    for tool in ("ffmpeg", "ffprobe"):
-        if not shutil.which(tool):
-            sys.exit(f"{tool} not found on PATH")
+    # Ensure ffmpeg binary is available (check PATH, then imageio-ffmpeg)
+    if not shutil.which("ffmpeg"):
+        try:
+            import imageio_ffmpeg
+            ffmpeg_dir = str(Path(imageio_ffmpeg.get_ffmpeg_exe()).parent)
+            import os
+            os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+        except Exception:
+            pass
+
+    if not shutil.which("ffmpeg"):
+        sys.exit("ffmpeg not found on PATH. Install it via apt/brew/conda or run: pip install imageio-ffmpeg")
 
     title, scenes = load_scenes(args.storyboard)
     print(f"Building '{title}' ({len(scenes)} scenes)")
     size = (args.width, args.height)
-    tts = TTS(args.lang, args.rate, args.tts_backend)
+    tts = TTS(args.lang, args.rate, args.tts_backend, args.voice)
+
+    out_path = Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     tmp = Path(tempfile.mkdtemp(prefix="storyboard_"))
     try:
@@ -347,8 +435,8 @@ def main():
         listing = tmp / "clips.txt"
         listing.write_text("".join(f"file '{c.as_posix()}'\n" for c in clips), encoding="utf-8")
         run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(listing),
-             "-c", "copy", str(args.output)])
-        print(f"\nDone -> {args.output} ({audio_duration(args.output):.1f}s)")
+             "-c", "copy", str(out_path)])
+        print(f"\nDone -> {out_path} ({audio_duration(out_path):.1f}s)")
     finally:
         if args.keep_temp:
             print(f"Temp files kept in {tmp}")

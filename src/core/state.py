@@ -37,13 +37,18 @@ class UserProfile:
 
 
 @dataclass
-class NewsContext:
+class KnowledgeContext:
     """
-    Output of NewsRetrieverAgent.
-    A list of recent news snippets relevant to the user's profile.
+    Output of KnowledgeRetrieverAgent (Phase 4).
+    A list of verified news, encyclopedic lore, scientific mechanisms, and factual snippets
+    grounding the story in real-world details.
     """
     snippets: list[dict[str, str]] = field(default_factory=list)
     # Each entry: {"headline": "...", "summary": "...", "url": "..."}
+
+
+# Backward-compatibility alias
+NewsContext = KnowledgeContext
 
 
 @dataclass
@@ -115,11 +120,19 @@ class SharedState:
     selected_pitch: dict[str, Any] = field(default_factory=dict)            # Winning pitch
     director_critique: list[dict[str, Any]] = field(default_factory=list)  # Director reviews of each pitch
     director_notes: str = ""                                               # Directorial instructions for production
-    news_context: NewsContext = field(default_factory=NewsContext)
+    knowledge_context: KnowledgeContext = field(default_factory=KnowledgeContext)  # Verified facts, lore & news
+    news_context: NewsContext = field(default_factory=NewsContext)            # Backward-compatibility mirror
     image_context: ImageContext = field(default_factory=ImageContext)
 
     # --- FINAL OUTPUT ---
     storyboard: Storyboard = field(default_factory=Storyboard)
+
+    def __post_init__(self) -> None:
+        # Keep knowledge_context and news_context synchronized
+        if not self.knowledge_context.snippets and self.news_context.snippets:
+            self.knowledge_context = self.news_context
+        elif not self.news_context.snippets and self.knowledge_context.snippets:
+            self.news_context = self.knowledge_context
 
     # --- METADATA ---
     run_id: str = ""
@@ -135,7 +148,47 @@ class SharedState:
     def to_dict(self) -> dict:
         """Serialize the full state to a plain dict (for saving to JSON)."""
         import dataclasses
-        return dataclasses.asdict(self)
+        d = dataclasses.asdict(self)
+        # Ensure synchronization in serialized dict
+        d["news_context"] = d.get("knowledge_context", d.get("news_context", {}))
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SharedState":
+        """Deserialize SharedState from a dictionary (e.g., loaded from JSON)."""
+        history_data = data.get("user_history", {})
+        profile_data = data.get("user_profile", {})
+        k_data = data.get("knowledge_context") or data.get("news_context", {})
+        img_data = data.get("image_context", {})
+        sb_data = data.get("storyboard", {})
+
+        return cls(
+            user_history=UserHistory(videos=history_data.get("videos", [])),
+            user_profile=UserProfile(
+                interests=profile_data.get("interests", []),
+                themes=profile_data.get("themes", []),
+                preferred_style=profile_data.get("preferred_style", ""),
+                raw_summary=profile_data.get("raw_summary", ""),
+                investigated_insights=profile_data.get("investigated_insights", []),
+            ),
+            candidate_pitches=data.get("candidate_pitches", []),
+            selected_pitch=data.get("selected_pitch", {}),
+            director_critique=data.get("director_critique", []),
+            director_notes=data.get("director_notes", ""),
+            knowledge_context=KnowledgeContext(snippets=k_data.get("snippets", [])),
+            news_context=NewsContext(snippets=k_data.get("snippets", [])),
+            image_context=ImageContext(images=img_data.get("images", [])),
+            storyboard=Storyboard(
+                title=sb_data.get("title", ""),
+                target_duration_seconds=sb_data.get("target_duration_seconds", 60),
+                scenes=sb_data.get("scenes", []),
+                overall_narrative=sb_data.get("overall_narrative", ""),
+            ),
+            run_id=data.get("run_id", ""),
+            pipeline_log=data.get("pipeline_log", []),
+            token_usage=data.get("token_usage", {}),
+            estimated_cost_usd=data.get("estimated_cost_usd", 0.0),
+        )
 
     def to_markdown(self) -> str:
         """Convert the storyboard into a human-readable Markdown format."""
@@ -189,6 +242,17 @@ class SharedState:
             if self.director_notes:
                 md_lines.append("### 📋 Directorial Notes & Production Guidance")
                 md_lines.append(f"{self.director_notes}\n")
+
+        snippets = self.knowledge_context.snippets or self.news_context.snippets
+        if snippets:
+            md_lines.append("## 📚 Grounded Knowledge & Factual Evidence\n")
+            for snip in snippets:
+                head = snip.get("headline", "Verified Fact")
+                summ = snip.get("summary", "")
+                url = snip.get("url", "")
+                source_str = f" ([Source]({url}))" if url else ""
+                md_lines.append(f"- **{head}**{source_str}: {summ}")
+            md_lines.append("")
 
         if self.user_profile.interests:
             md_lines.append("## Inferred User Profile")

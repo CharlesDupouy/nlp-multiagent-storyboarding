@@ -18,7 +18,7 @@ This capstone project investigates whether a **tool-augmented multi-agent pipeli
 ### Team Ownership & Deliverables
 - **Charles Dupouy (Lead Architecture & Tools):** Multi-agent orchestrator, agent designs, tool integrations (`youtube_tool`, `news_tool`, `image_tool`), prompt engineering, baseline harmonization, and final paper synthesis.
 - **Antoine Lepin (Data & Baseline Owner):** Peer watch history collection via GitHub Pages web tool, dataset curation/filtering, and running baseline batches.
-- **Max Robertson (Evaluation & Demo Owner):** Automated LLM judge (`evaluation/evaluator.py`), human blind A/B evaluation, and video sketch renderer (TTS + images).
+- **Max Robertson (Evaluation & Demo Owner):** Automated LLM judge (`evaluation/llm_judge.py`), human blind A/B evaluation, and video sketch renderer (TTS + images).
 
 ---
 
@@ -41,16 +41,16 @@ python3 main.py --history data/user_histories/example.json --baseline
 python3 -m unittest discover tests
 
 # Ingest an exported watch history from the web collector
-python3 src/tools/import_user_history.py /path/to/exported.json participant_name
+python3 src/tools/import_user_history.py --input /path/to/exported.json --user participant_name
+
+# Or ingest and randomly split into 3 parts for multi-video evaluation per user
+python3 src/tools/import_user_history.py --input /path/to/exported.json --user participant_name --split 3
 ```
 
 ### Evaluation & Scoring
 ```bash
-# Score a single storyboard using the LLM judge (4 criteria: 0.0 - 10.0 scale)
-python3 evaluation/evaluator.py --storyboard outputs/storyboards/storyboard_xyz.json
-
-# Perform side-by-side comparative scoring between Multi-Agent and Baseline storyboards
-python3 evaluation/evaluator.py --compare outputs/storyboards/storyboard_ma.json outputs/storyboards/storyboard_base.json
+# Compare Multi-Agent and Baseline storyboards side-by-side (with position debiasing)
+python3 evaluation/llm_judge.py --compare outputs/storyboards/storyboard_ma.json outputs/storyboards/storyboard_base.json
 
 # Run the batch blinded LLM judge over all generated storyboard pairs (with A/B order debiasing)
 python3 evaluation/llm_judge.py --dry-run                      # mock test plumbing without API calls
@@ -98,22 +98,22 @@ GroupProjetct/
 │   │   └── llm_client.py        # Centralized LLM client with global token & cost accounting
 │   ├── agents/                  # Autonomous specialized agents
 │   │   ├── base_agent.py        # Abstract base agent class
-│   │   ├── profiler_agent.py    # Two-round profiler with transcript extraction
-│   │   ├── pitch_agent.py       # Writers' Room producing 3 diverse story pitches
-│   │   ├── director_agent.py    # Showrunner selecting winning pitch with production notes
-│   │   ├── news_retriever_agent.py # Targeted news/fact retriever querying NewsAPI
-│   │   ├── image_search_agent.py   # Art Director: query cleaner + 4-candidate re-ranker
-│   │   └── scriptwriter_agent.py   # 2-pass writer: initial draft + visual grounding pass
+│   │   ├── profiler_agent.py    # Phase 1: Two-round profiler with transcript extraction
+│   │   ├── writers_room_agent.py# Phase 2: Writers' Room producing 3 diverse story pitches (pitch_agent.py shim)
+│   │   ├── director_agent.py    # Phase 3: Showrunner selecting winning pitch with production notes
+│   │   ├── knowledge_retriever_agent.py # Phase 4: Targeted fact, lore & news retriever (news_retriever_agent.py shim)
+│   │   ├── scriptwriter_agent.py# Phase 5 & 7: 2-pass writer: initial draft + visual grounding pass
+│   │   └── art_director_agent.py# Phase 6: Art Director: query cleaner + 4-candidate re-ranker (image_search_agent.py shim)
 │   └── tools/                   # External APIs and data helpers (with mock fallbacks)
 │       ├── youtube_tool.py      # youtube-transcript-api and oEmbed metadata scraper
-│       ├── news_tool.py         # NewsAPI.org client with query simplification
+│       ├── knowledge_tool.py    # Multi-tier knowledge search (NewsAPI + Wikipedia + LLM synthesis)
+│       ├── news_tool.py         # Backward-compatibility wrapper for knowledge_tool
 │       ├── image_tool.py        # Unsplash API client with cinematic query sanitizer
 │       └── import_user_history.py # Ingestion helper for web collector exports
 ├── baseline/
 │   └── single_agent_baseline.py # Fair, competitive zero-shot single-agent baseline
 ├── evaluation/
-│   ├── evaluator.py             # Single/pairwise LLM-as-a-judge scoring CLI
-│   └── llm_judge.py             # Automated batch judge with position debiasing & caching
+│   └── llm_judge.py             # Automated batch & pairwise LLM judge with position debiasing & caching
 ├── tools/
 │   └── history_collector/       # Client-side watch history collector (bookmarklet + HTML)
 ├── data/
@@ -141,9 +141,9 @@ flowchart TD
     T1 --> P2["Phase 1B: Profiler Round 2\nSynthesizes fine-grained profile with concrete spoken insights"]
     P2 --> WR["Phase 2: WritersRoomAgent\nBrainstorms 3 distinct candidate pitches matching user style"]
     WR --> DIR["Phase 3: DirectorAgent (Showrunner)\nCritiques all 3 pitches, selects winner & issues production notes"]
-    DIR --> N["Phase 4: NewsRetrieverAgent (Targeted Research)\nFormulates search queries specific to the winning pitch via NewsAPI.org"]
+    DIR --> N["Phase 4: KnowledgeRetrieverAgent (Targeted Research)\nMulti-tiered queries (Wikipedia + NewsAPI + LLM synthesis)"]
     N --> S1["Phase 5: ScriptwriterAgent (Draft Pass)\nDrafts 60s storyboard executing winning pitch + director guidance"]
-    S1 --> IMG["Phase 6: ImageSearchAgent (Art Director)\n1. Physical query sanitization (no cinematic fluff)\n2. Candidate retrieval (4 per scene via Unsplash API)\n3. Semantic re-ranking to select most representative photo"]
+    S1 --> IMG["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no cinematic fluff)\n2. Candidate retrieval (4 per scene via Unsplash API)\n3. Semantic re-ranking to select most representative photo"]
     IMG --> S2["Phase 7: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
     S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated Unsplash CDN URLs (zero hallucination)"]
     RES --> O["Storyboard JSON & Markdown\n(Pitches, Director Decision, Scenes, Subtitles, Narration, Image URLs)"]
@@ -236,7 +236,7 @@ All tools in `src/tools/` must follow the **Graceful Degradation Pattern**:
    ```
 3. Run the LLM judge comparison:
    ```bash
-   python3 evaluation/evaluator.py --compare outputs/storyboards/storyboard_<MA_RUN_ID>.json outputs/storyboards/storyboard_<BASE_RUN_ID>.json
+   python3 evaluation/llm_judge.py --compare outputs/storyboards/storyboard_<MA_RUN_ID>.json outputs/storyboards/storyboard_<BASE_RUN_ID>.json
    ```
 4. Copy the token counts, costs, and scores into the Cost Log and Results tables in `docs/project_tracker.md`.
 

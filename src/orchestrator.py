@@ -25,12 +25,12 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from src.agents.art_director_agent import ArtDirectorAgent, ImageSearchAgent
 from src.agents.director_agent import DirectorAgent
-from src.agents.image_search_agent import ImageSearchAgent
-from src.agents.news_retriever_agent import NewsRetrieverAgent
-from src.agents.pitch_agent import WritersRoomAgent
+from src.agents.knowledge_retriever_agent import KnowledgeRetrieverAgent, NewsRetrieverAgent
 from src.agents.profiler_agent import ProfilerAgent
 from src.agents.scriptwriter_agent import ScriptwriterAgent
+from src.agents.writers_room_agent import WritersRoomAgent
 from src.core.llm_client import get_client, reset_token_usage, get_token_usage, calculate_cost_usd
 from src.core.state import SharedState, UserHistory
 
@@ -41,9 +41,10 @@ class Orchestrator:
       Phase 1: ProfilerAgent (2-round with spoken transcripts)
       Phase 2: WritersRoomAgent (3 distinct candidate pitches adapting to user vibe)
       Phase 3: DirectorAgent (Showrunner critiques pitches & selects winner)
-      Phase 4: NewsRetrieverAgent (Targeted news & fact retrieval for winning pitch)
+      Phase 4: KnowledgeRetrieverAgent (Targeted news, lore & fact retrieval for winning pitch)
       Phase 5: ScriptwriterAgent (Draft Pass based on winning pitch & director notes)
-      Phase 6: ImageSearchAgent & ScriptwriterAgent (Refine Pass grounded to images)
+      Phase 6: ArtDirectorAgent (Physical query formulation & candidate semantic re-ranking)
+      Phase 7: ScriptwriterAgent (Refine Pass grounded to curated visual assets)
     """
 
     def __init__(
@@ -63,8 +64,10 @@ class Orchestrator:
         self.profiler = ProfilerAgent(model=profiler_model, client=client)
         self.writers_room = WritersRoomAgent(model=writers_room_model or profiler_model, client=client)
         self.director = DirectorAgent(model=director_model or scriptwriter_model, client=client)
-        self.news_retriever = NewsRetrieverAgent(model=retriever_model, client=client)
-        self.image_searcher = ImageSearchAgent(model=image_model, client=client)
+        self.knowledge_retriever = KnowledgeRetrieverAgent(model=retriever_model, client=client)
+        self.news_retriever = self.knowledge_retriever  # Backward-compatibility alias
+        self.art_director = ArtDirectorAgent(model=image_model, client=client)
+        self.image_searcher = self.art_director         # Backward-compatibility alias
         self.scriptwriter = ScriptwriterAgent(model=scriptwriter_model, client=client)
 
         self.output_dir = Path(output_dir)
@@ -86,8 +89,8 @@ class Orchestrator:
             profiler_model=models.get("profiler", "deepseek-chat"),
             writers_room_model=models.get("writers_room", "deepseek-chat"),
             director_model=models.get("director", "deepseek-chat"),
-            retriever_model=models.get("retriever", "deepseek-chat"),
-            image_model=models.get("image_search", "deepseek-chat"),
+            retriever_model=models.get("knowledge_retriever") or models.get("retriever", "deepseek-chat"),
+            image_model=models.get("art_director") or models.get("image_search", "deepseek-chat"),
             scriptwriter_model=models.get("scriptwriter", "deepseek-chat"),
             base_url=cfg.get("llm", {}).get("base_url"),
             api_key=cfg.get("llm", {}).get("api_key"),
@@ -126,17 +129,17 @@ class Orchestrator:
         state.log("--- Phase 3: Pitch Deliberation & Selection (DirectorAgent) ---")
         state = self.director.run(state)
 
-        # Phase 4: Targeted Fact & News Retrieval (Option A: on Winning Pitch)
-        state.log("--- Phase 4: Targeted Fact & News Retrieval (NewsRetrieverAgent) ---")
-        state = self.news_retriever.run(state)
+        # Phase 4: Targeted Fact & Knowledge Retrieval (on Winning Pitch)
+        state.log("--- Phase 4: Targeted Knowledge & Fact Retrieval (KnowledgeRetrieverAgent) ---")
+        state = self.knowledge_retriever.run(state)
 
-        # Phase 5: Initial Storyboard Draft (Following Director Notes & News)
+        # Phase 5: Initial Storyboard Draft (Following Director Notes & Knowledge)
         state.log("--- Phase 5: Storyboard Drafting (ScriptwriterAgent - Draft Pass) ---")
         state = self.scriptwriter.draft(state)
 
         # Phase 6: Visual Search & Asset Grounding
-        state.log("--- Phase 6: Scene Visual Search (ImageSearchAgent) ---")
-        state = self.image_searcher.run(state)
+        state.log("--- Phase 6: Visual Grounding & Asset Curation (ArtDirectorAgent) ---")
+        state = self.art_director.run(state)
 
         state.log("--- Phase 7: Storyboard Grounding & Refinement (ScriptwriterAgent - Refine Pass) ---")
         state = self.scriptwriter.refine(state)

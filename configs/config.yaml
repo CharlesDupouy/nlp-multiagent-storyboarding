@@ -8,24 +8,14 @@ llm:
   # api_key: set via DEEPSEEK_API_KEY environment variable
 
 models:
-  # Model for ProfilerAgent (fast, low-cost — profiling is straightforward)
-  profiler: "deepseek-chat"
-
-  # Model for WritersRoomAgent (creative ideation of candidate pitches)
-  writers_room: "deepseek-chat"
-
-  # Model for DirectorAgent (editorial review & pitch selection)
-  director: "deepseek-chat"
-
-  # Model for NewsRetrieverAgent (targeted factual research on winning pitch)
-  retriever: "deepseek-chat"
-
-  # Model for ImageSearchAgent (fast — keyword extraction only)
-  image_search: "deepseek-chat"
-
-  # Model for ScriptwriterAgent (best available — creative writing task)
-  scriptwriter: "deepseek-chat"
-  # Switch to "deepseek-reasoner" for higher quality at higher cost
+  profiler: "deepseek-chat"               # Phase 1: Fast classification & video selection
+  writers_room: "deepseek-reasoner"       # Phase 2: DeepSeek R1 for diverse narrative angles
+  director: "deepseek-reasoner"           # Phase 3: DeepSeek R1 for critical pitch evaluation & production notes
+  knowledge_retriever: "deepseek-chat"    # Phase 4: Multi-tier factual search query formulation
+  retriever: "deepseek-chat"              # Phase 4 alias (backward compatibility)
+  art_director: "deepseek-chat"           # Phase 6: Fast physical noun sanitizer & candidate re-ranking
+  image_search: "deepseek-chat"           # Phase 6 alias (backward compatibility)
+  scriptwriter: "deepseek-reasoner"       # Phase 5 & 7: DeepSeek R1 for sharp, verbatim dialogue
 
 baseline:
   # Model for the single-agent baseline (same model = fair comparison)

@@ -12,24 +12,30 @@ Live Participant Collector: [https://charlesdupouy.github.io/nlp-multiagent-stor
 pip install -r requirements.txt
 
 # 2. Set your API credentials in .env
-# (DEEPSEEK_API_KEY, NEWSAPI_KEY, UNSPLASH_ACCESS_KEY)
+# (DEEPSEEK_API_KEY, optional: NEWSAPI_KEY, UNSPLASH_ACCESS_KEY)
 
-# 3. Run the full multi-agent pipeline (v3.2)
+# 3. Run the full multi-agent pipeline (v4.0)
 python3 main.py --history data/user_histories/example.json
 
-# 4. Run the single-agent baseline
+# 4. Run the single-agent baseline on the exact same history
 python3 main.py --history data/user_histories/example.json --baseline
 
-# 5. Run LLM-as-a-Judge evaluation / comparison
-python3 evaluation/evaluator.py --compare outputs/storyboards/storyboard_ma.json outputs/storyboards/storyboard_base.json
+# 5. Render a storyboard JSON into a video sketch (TTS + subtitles + slideshow MP4)
+python3 storyboard_to_video.py outputs/storyboards/storyboard_xyz.json -o outputs/storyboard_xyz.mp4
 
-# 6. Run unit tests
+# 6. Run LLM-as-a-Judge comparison (side-by-side with position debiasing)
+python3 evaluation/llm_judge.py --compare outputs/storyboards/storyboard_ma.json outputs/storyboards/storyboard_base.json
+
+# Or run batch automated evaluation across all history pairs
+python3 evaluation/llm_judge.py --preset deepseek
+
+# 7. Run unit tests
 python3 -m unittest discover tests/
 ```
 
 ---
 
-## System Architecture (v3.2)
+## System Architecture (v4.0)
 
 ```mermaid
 flowchart TD
@@ -38,10 +44,10 @@ flowchart TD
     T1 --> P2["Phase 1B: Profiler Round 2\nSynthesizes fine-grained profile with concrete spoken insights"]
     P2 --> WR["Phase 2: WritersRoomAgent\nBrainstorms 3 distinct candidate pitches matching user style"]
     WR --> DIR["Phase 3: DirectorAgent (Showrunner)\nCritiques all 3 pitches, selects winner & issues production notes"]
-    DIR --> N["Phase 4: NewsRetrieverAgent (Targeted Research)\nFormulates search queries specific to the winning pitch via NewsAPI.org"]
-    N --> S1["Phase 5: ScriptwriterAgent (Draft Pass)\nDrafts 60s storyboard executing winning pitch + director guidance"]
-    S1 --> IMG["Phase 6: ImageSearchAgent (Art Director)\n1. Physical query sanitization (no cinematic fluff)\n2. Candidate retrieval (4 per scene via Unsplash API)\n3. Semantic re-ranking to select most representative photo"]
-    IMG --> S2["Phase 7: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
+    DIR --> K["Phase 4: KnowledgeRetrieverAgent (Targeted Research)\nMulti-tiered queries (Wikipedia + NewsAPI + LLM synthesis)"]
+    K --> S1["Phase 5: ScriptwriterAgent (Draft Pass)\nDrafts 60s storyboard executing winning pitch + director guidance"]
+    S1 --> ART["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no cinematography fluff)\n2. Candidate retrieval (4 per scene via Unsplash API)\n3. Semantic re-ranking to select most representative photo"]
+    ART --> S2["Phase 7: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
     S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated Unsplash CDN URLs (no hallucination)"]
     RES --> O["Storyboard JSON & Markdown\n(Pitches, Director Decision, Scenes, Subtitles, Narration, Image URLs)"]
 ```
@@ -54,13 +60,21 @@ To collect watch histories from study participants without API keys or credentia
 1. Share the live GitHub Pages link: [https://charlesdupouy.github.io/nlp-multiagent-storyboarding/](https://charlesdupouy.github.io/nlp-multiagent-storyboarding/)
 2. The participant drags the **📌 Export Shorts History** bookmarklet to their browser bar.
 3. They visit [youtube.com/feed/history](https://www.youtube.com/feed/history), click the bookmark, and download `youtube_shorts_history.json`.
-4. Ingest their exported file into the pipeline:
+4. Ingest their exported file into the pipeline (and optionally randomly partition it into $X$ parts for multi-video evaluation):
    ```bash
-   python3 src/tools/import_user_history.py /path/to/downloaded.json participant_alice
+   # Standard ingestion:
+   python3 src/tools/import_user_history.py --input /path/to/downloaded.json --user participant_alice
+
+   # Or ingest and randomly split into 3 parts (3 distinct video pairs per user):
+   python3 src/tools/import_user_history.py --input /path/to/downloaded.json --user participant_alice --split 3
    ```
 5. Run the storyboarding generator:
    ```bash
+   # Multi-agent
    python3 main.py --history data/user_histories/participant_alice.json
+
+   # Baseline
+   python3 main.py --history data/user_histories/participant_alice.json --baseline
    ```
 
 ---
@@ -70,45 +84,48 @@ To collect watch histories from study participants without API keys or credentia
 ```
 .
 ├── main.py                        # Top-level CLI (pipeline & baseline execution)
+├── storyboard_to_video.py         # Video sketch renderer (JSON -> MP4 with TTS & subtitles)
 ├── GEMINI.md                      # Machine & agent onboarding specification
 ├── configs/config.yaml            # Model and API configuration
 ├── src/
 │   ├── orchestrator.py            # 7-phase pipeline controller
 │   ├── core/
 │   │   ├── state.py               # SharedState blackboard (pitches, director notes, token audit)
-│   │   └── llm_client.py          # OpenAI-compatible LLM wrapper + token/cost accounting
+│   │   └── llm_client.py          # Centralized LLM wrapper + token/cost accounting
 │   ├── agents/
 │   │   ├── base_agent.py          # Abstract base class for all agents
-│   │   ├── profiler_agent.py      # Two-round profiler with transcript extraction
-│   │   ├── pitch_agent.py         # Writers' room ideation (3 distinct candidate pitches)
-│   │   ├── director_agent.py      # Showrunner critique & pitch commissioning
-│   │   ├── news_retriever_agent.py # Targeted news/fact research on winning pitch
-│   │   ├── image_search_agent.py  # Art Director image curation & candidate selection
-│   │   └── scriptwriter_agent.py  # 2-pass drafting & visual grounding
+│   │   ├── profiler_agent.py      # Phase 1: Two-round profiler with transcript extraction
+│   │   ├── writers_room_agent.py  # Phase 2: Writers' room producing 3 distinct candidate pitches
+│   │   ├── director_agent.py      # Phase 3: Showrunner critique & pitch selection
+│   │   ├── knowledge_retriever_agent.py # Phase 4: Targeted fact, lore & news research
+│   │   ├── scriptwriter_agent.py  # Phase 5 & 7: 2-pass drafting & visual grounding
+│   │   └── art_director_agent.py  # Phase 6: Art Director image query cleaner & re-ranker
 │   └── tools/
 │       ├── youtube_tool.py        # YouTube spoken transcript & oEmbed metadata extraction
-│       ├── news_tool.py           # NewsAPI.org search with query simplification
+│       ├── knowledge_tool.py      # Multi-tier knowledge search (Wikipedia + NewsAPI + LLM synthesis)
+│       ├── news_tool.py           # Backward-compatibility wrapper for knowledge_tool
 │       ├── image_tool.py          # Unsplash API search with query sanitization
-│       └── import_user_history.py # CLI ingestion & title enrichment helper
+│       └── import_user_history.py # CLI ingestion, title enrichment & random split helper
 ├── baseline/
-│   └── single_agent_baseline.py  # Scientifically neutral single-agent baseline
+│   └── single_agent_baseline.py   # Scientifically neutral single-agent baseline (with naive Top-1 image search)
 ├── evaluation/
-│   └── evaluator.py              # LLM-as-a-judge rubric scoring & comparison CLI
+│   └── llm_judge.py               # Batch & pairwise LLM judge with position debiasing (grades on 5 + win rates)
 ├── data/
-│   └── user_histories/           # User watch histories (JSON)
-├── outputs/storyboards/          # Generated storyboard JSON and companion Markdown files
-├── prompts/                      # Registry of versioned system prompts (.txt)
-├── tests/                        # Unit tests (run with python3 -m unittest discover tests)
-└── docs/                         # Project tracker, dev log & GitHub Pages assets
+│   └── user_histories/            # User watch histories (JSON)
+├── outputs/
+│   ├── storyboards/               # Generated storyboard JSON and companion Markdown files
+│   └── judge/                     # Batch evaluation results, summary reports & CSV exports
+├── prompts/                       # Plain-text registry of versioned system prompts (.txt)
+├── tests/                         # Unit tests (run with python3 -m unittest discover tests)
+└── docs/                          # Living project tracker, dev log & GitHub Pages assets
 ```
 
 ---
 
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `DEEPSEEK_API_KEY` | DeepSeek API key (required) |
-| `LLM_BASE_URL` | LLM API base URL (default: `https://api.deepseek.com`) |
-| `NEWSAPI_KEY` | NewsAPI.org key (live news search) |
-| `UNSPLASH_ACCESS_KEY` | Unsplash API key (live photographic search) |
+| Variable | Required | Description | Fallback |
+|---|---|---|---|
+| `DEEPSEEK_API_KEY` | Recommended | DeepSeek API key for LLM agents | OpenAI-compatible endpoint |
+| `NEWSAPI_KEY` | Optional | NewsAPI.org key for breaking news search | Falls back to Wikipedia / LLM synthesis |
+| `UNSPLASH_ACCESS_KEY` | Optional | Unsplash API key for stock photo search | Falls back to thematic placeholder CDN assets |
