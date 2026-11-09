@@ -75,7 +75,7 @@
   // Live stop button (visible during scanning)
   const scanControlBox = createEl("div", "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;");
   const liveCountBadge = createEl("span", "font-size:12px;color:#cbd5e1;font-variant-numeric:tabular-nums;", "0 Shorts found so far");
-  const stopEarlyBtn = createEl("button", "background:#1e293b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.08);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;transition:background 0.15s ease;", "Export Now");
+  const stopEarlyBtn = createEl("button", "background:#1e293b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.08);padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;transition:background 0.15s ease;", "Export Now");
   stopEarlyBtn.onmouseenter = () => { stopEarlyBtn.style.background = "#283548"; };
   stopEarlyBtn.onmouseleave = () => { stopEarlyBtn.style.background = "#1e293b"; };
   stopEarlyBtn.onclick = () => { forceStop = true; };
@@ -107,7 +107,7 @@
 
   document.body.appendChild(container);
 
-  // Helper to count distinct shorts currently rendered in DOM
+  // Helpers to count distinct items in DOM
   function countDistinctShortsInDOM() {
     const anchors = document.querySelectorAll('a[href*="/shorts/"]');
     const ids = new Set();
@@ -119,43 +119,98 @@
     return ids.size;
   }
 
-  // 2. Dynamic auto-scrolling
-  // Target: up to 80 shorts or 25 scroll cycles
-  const TARGET_SHORTS = 80;
-  const MAX_SCROLL_STEPS = 25;
-  let lastHeight = 0;
-  let noNewHeightCount = 0;
+  function countTotalVideosInDOM() {
+    return document.querySelectorAll("ytd-video-renderer, ytd-reel-item-renderer, ytd-rich-item-renderer, ytd-grid-video-renderer").length;
+  }
 
-  for (let i = 1; i <= MAX_SCROLL_STEPS; i++) {
+  // Trigger YouTube infinite scroll loaders
+  function triggerYouTubeScroll() {
+    // 1. Scroll window and documentElement
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    if (document.scrollingElement) {
+      document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight;
+    }
+
+    // 2. Bring YouTube's continuation sentinel element into view
+    const continuations = document.querySelectorAll("ytd-continuation-item-renderer");
+    if (continuations.length > 0) {
+      const lastContinuation = continuations[continuations.length - 1];
+      if (lastContinuation && lastContinuation.scrollIntoView) {
+        lastContinuation.scrollIntoView({ block: "end", behavior: "instant" });
+      }
+    }
+
+    // 3. Dispatch native scroll event to wake up YouTube listeners
+    window.dispatchEvent(new Event("scroll"));
+  }
+
+  // 2. Deep Dynamic Scrolling with Network Grace Periods
+  const TARGET_SHORTS = 100;
+  const MAX_CYCLES = 35;
+  let consecutiveStalls = 0;
+
+  for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
     if (isCancelled || forceStop) break;
 
     const currentCount = countDistinctShortsInDOM();
-    liveCountBadge.textContent = `${currentCount} Shorts found so far`;
-    statusEl.textContent = `Scanning history... scrolling (${i}/${MAX_SCROLL_STEPS})`;
+    const currentTotal = countTotalVideosInDOM();
 
-    const progressPct = Math.min(85, Math.max(10, Math.round((currentCount / TARGET_SHORTS) * 85)));
+    liveCountBadge.textContent = `${currentCount} Shorts found`;
+    stopEarlyBtn.textContent = currentCount > 0 ? `Export Now (${currentCount})` : "Export Now";
+
+    const progressPct = Math.min(85, Math.max(8, Math.round((currentCount / TARGET_SHORTS) * 85)));
     progressInner.style.width = `${progressPct}%`;
 
+    // Stop if target reached
     if (currentCount >= TARGET_SHORTS) {
       break;
     }
 
-    // Scroll to bottom
-    const currentHeight = document.documentElement.scrollHeight;
-    window.scrollTo({ top: currentHeight, behavior: "smooth" });
+    statusEl.textContent = `Scanning history... cycle ${cycle}/${MAX_CYCLES} (${currentCount} Shorts)`;
+    triggerYouTubeScroll();
 
-    if (currentHeight === lastHeight) {
-      noNewHeightCount++;
-      if (noNewHeightCount >= 3) {
-        // End of history reached
+    // Active polling wait: wait up to 3.2 seconds for YouTube's network request to resolve and append DOM nodes
+    const pollInterval = 300;
+    let waitedMs = 0;
+    let itemsAppended = false;
+
+    while (waitedMs < 3200) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+      waitedMs += pollInterval;
+
+      if (isCancelled || forceStop) break;
+
+      const newCount = countDistinctShortsInDOM();
+      const newTotal = countTotalVideosInDOM();
+
+      if (newCount > currentCount || newTotal > currentTotal) {
+        itemsAppended = true;
+        liveCountBadge.textContent = `${newCount} Shorts found`;
+        stopEarlyBtn.textContent = `Export Now (${newCount})`;
         break;
       }
-    } else {
-      noNewHeightCount = 0;
-    }
-    lastHeight = currentHeight;
 
-    await new Promise((r) => setTimeout(r, 700));
+      // Show responsive waiting message
+      if (waitedMs >= 1200) {
+        statusEl.textContent = `Waiting for YouTube to load more... (${currentCount} Shorts)`;
+        triggerYouTubeScroll();
+      }
+    }
+
+    if (itemsAppended) {
+      consecutiveStalls = 0;
+    } else {
+      consecutiveStalls++;
+      // Check if YouTube still has a continuation spinner/renderer waiting
+      const hasContinuation = document.querySelector("ytd-continuation-item-renderer") !== null;
+
+      // Only terminate if no new items loaded after multiple consecutive attempts AND no continuation exists
+      const maxAllowedStalls = hasContinuation ? 5 : 3;
+      if (consecutiveStalls >= maxAllowedStalls) {
+        // End of user history reached
+        break;
+      }
+    }
   }
 
   if (isCancelled) return;
