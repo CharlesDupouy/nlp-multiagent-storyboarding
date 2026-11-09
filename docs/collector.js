@@ -1,10 +1,12 @@
 /**
- * YouTube Shorts Watch History Exporter (COMP 4221 NLP Study)
+ * YouTube Shorts Watch History Exporter (COMP 4221 NLP Study) - v2.2 Deep Scan
  *
  * 100% Trusted-Types and CSP compliant:
  * Uses pure document.createElement, textContent, and appendChild (zero innerHTML sinks).
  */
 (async function runShortsCollector() {
+  console.log("%c[Shorts Collector v2.2] Initialized! Starting deep scan...", "color: #e50914; font-weight: bold; font-size: 13px;");
+
   if (!window.location.href.includes("youtube.com")) {
     alert("Please open YouTube first.\n\nNavigate to https://www.youtube.com/feed/history and click this bookmark again.");
     window.location.href = "https://www.youtube.com/feed/history";
@@ -33,7 +35,7 @@
   // Header row
   const header = createEl("div", "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;");
   const titleBox = createEl("div", "font-weight:600;font-size:14px;color:#f8fafc;display:flex;align-items:center;gap:8px;");
-  const badge = createEl("span", "background:#e50914;color:#fff;font-size:10px;font-weight:700;letter-spacing:0.5px;padding:2px 6px;border-radius:4px;text-transform:uppercase;", "Shorts");
+  const badge = createEl("span", "background:#e50914;color:#fff;font-size:10px;font-weight:700;letter-spacing:0.5px;padding:2px 6px;border-radius:4px;text-transform:uppercase;", "Shorts v2.2");
   const titleText = createEl("span", "", "History Exporter");
   titleBox.appendChild(badge);
   titleBox.appendChild(titleText);
@@ -48,6 +50,7 @@
 
   const cleanup = () => {
     isCancelled = true;
+    console.log("[Shorts Collector] Modal closed by user.");
     container.remove();
     window.removeEventListener("keydown", handleKeyDown);
   };
@@ -63,12 +66,12 @@
   container.appendChild(header);
 
   // Status message
-  const statusEl = createEl("div", "font-size:13px;color:#94a3b8;margin-bottom:10px;", "Scanning watch history...");
+  const statusEl = createEl("div", "font-size:13px;color:#94a3b8;margin-bottom:10px;", "Preparing deep scan...");
   container.appendChild(statusEl);
 
   // Progress Bar
   const progressBar = createEl("div", "height:4px;background:#1e293b;border-radius:2px;overflow:hidden;margin-bottom:12px;");
-  const progressInner = createEl("div", "width:5%;height:100%;background:#e50914;transition:width 0.25s ease;");
+  const progressInner = createEl("div", "width:4%;height:100%;background:#e50914;transition:width 0.25s ease;");
   progressBar.appendChild(progressInner);
   container.appendChild(progressBar);
 
@@ -78,7 +81,10 @@
   const stopEarlyBtn = createEl("button", "background:#1e293b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.08);padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;transition:background 0.15s ease;", "Export Now");
   stopEarlyBtn.onmouseenter = () => { stopEarlyBtn.style.background = "#283548"; };
   stopEarlyBtn.onmouseleave = () => { stopEarlyBtn.style.background = "#1e293b"; };
-  stopEarlyBtn.onclick = () => { forceStop = true; };
+  stopEarlyBtn.onclick = () => {
+    console.log("[Shorts Collector] User clicked 'Export Now' early button.");
+    forceStop = true;
+  };
   scanControlBox.appendChild(liveCountBadge);
   scanControlBox.appendChild(stopEarlyBtn);
   container.appendChild(scanControlBox);
@@ -125,32 +131,45 @@
 
   // Trigger YouTube infinite scroll loaders
   function triggerYouTubeScroll() {
+    const doc = document.documentElement;
+
     // 1. Scroll window and documentElement
-    window.scrollTo(0, document.documentElement.scrollHeight);
+    window.scrollBy(0, 3500);
+    window.scrollTo(0, doc.scrollHeight);
     if (document.scrollingElement) {
-      document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight;
+      document.scrollingElement.scrollTop = doc.scrollHeight;
     }
 
-    // 2. Bring YouTube's continuation sentinel element into view
-    const continuations = document.querySelectorAll("ytd-continuation-item-renderer");
+    // 2. Bring YouTube's continuation sentinel element into view if present
+    const continuations = document.querySelectorAll("ytd-continuation-item-renderer, ytd-reel-shelf-renderer");
     if (continuations.length > 0) {
-      const lastContinuation = continuations[continuations.length - 1];
-      if (lastContinuation && lastContinuation.scrollIntoView) {
-        lastContinuation.scrollIntoView({ block: "end", behavior: "instant" });
+      const last = continuations[continuations.length - 1];
+      if (last && last.scrollIntoView) {
+        last.scrollIntoView({ block: "end", behavior: "instant" });
       }
     }
 
-    // 3. Dispatch native scroll event to wake up YouTube listeners
+    // 3. Dispatch keyboard End and PageDown events to wake up YouTube listeners
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "PageDown", code: "PageDown", keyCode: 34, bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "End", code: "End", keyCode: 35, bubbles: true }));
+
+    // 4. Dispatch native scroll event
     window.dispatchEvent(new Event("scroll"));
   }
 
-  // 2. Deep Dynamic Scrolling with Network Grace Periods
-  const TARGET_SHORTS = 100;
-  const MAX_CYCLES = 35;
-  let consecutiveStalls = 0;
+  // 2. Deep Dynamic Scrolling
+  // Performs 25 cycles with 1.2s delay between scrolls (~30 seconds total)
+  // Stops early ONLY if TARGET_SHORTS is reached or user clicks "Export Now"
+  const TARGET_SHORTS = 80;
+  const TOTAL_CYCLES = 25;
 
-  for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
-    if (isCancelled || forceStop) break;
+  console.log(`[Shorts Collector] Target: ${TARGET_SHORTS} Shorts. Running up to ${TOTAL_CYCLES} scroll cycles...`);
+
+  for (let cycle = 1; cycle <= TOTAL_CYCLES; cycle++) {
+    if (isCancelled || forceStop) {
+      console.log(`[Shorts Collector] Scan halted at cycle ${cycle}. Proceeding to extraction.`);
+      break;
+    }
 
     const currentCount = countDistinctShortsInDOM();
     const currentTotal = countTotalVideosInDOM();
@@ -158,59 +177,25 @@
     liveCountBadge.textContent = `${currentCount} Shorts found`;
     stopEarlyBtn.textContent = currentCount > 0 ? `Export Now (${currentCount})` : "Export Now";
 
-    const progressPct = Math.min(85, Math.max(8, Math.round((currentCount / TARGET_SHORTS) * 85)));
+    const progressPct = Math.min(85, Math.max(5, Math.round((cycle / TOTAL_CYCLES) * 85)));
     progressInner.style.width = `${progressPct}%`;
 
-    // Stop if target reached
+    statusEl.textContent = `Deep scanning history... (${cycle}/${TOTAL_CYCLES}) • ${currentCount} Shorts`;
+
+    console.log(
+      `[Shorts Collector] Cycle ${cycle}/${TOTAL_CYCLES}: found ${currentCount} Shorts | ${currentTotal} total video cards | docHeight: ${document.documentElement.scrollHeight}px`
+    );
+
     if (currentCount >= TARGET_SHORTS) {
+      console.log(`[Shorts Collector] Reached target of ${TARGET_SHORTS} Shorts!`);
       break;
     }
 
-    statusEl.textContent = `Scanning history... cycle ${cycle}/${MAX_CYCLES} (${currentCount} Shorts)`;
+    // Scroll multi-target
     triggerYouTubeScroll();
 
-    // Active polling wait: wait up to 3.2 seconds for YouTube's network request to resolve and append DOM nodes
-    const pollInterval = 300;
-    let waitedMs = 0;
-    let itemsAppended = false;
-
-    while (waitedMs < 3200) {
-      await new Promise((r) => setTimeout(r, pollInterval));
-      waitedMs += pollInterval;
-
-      if (isCancelled || forceStop) break;
-
-      const newCount = countDistinctShortsInDOM();
-      const newTotal = countTotalVideosInDOM();
-
-      if (newCount > currentCount || newTotal > currentTotal) {
-        itemsAppended = true;
-        liveCountBadge.textContent = `${newCount} Shorts found`;
-        stopEarlyBtn.textContent = `Export Now (${newCount})`;
-        break;
-      }
-
-      // Show responsive waiting message
-      if (waitedMs >= 1200) {
-        statusEl.textContent = `Waiting for YouTube to load more... (${currentCount} Shorts)`;
-        triggerYouTubeScroll();
-      }
-    }
-
-    if (itemsAppended) {
-      consecutiveStalls = 0;
-    } else {
-      consecutiveStalls++;
-      // Check if YouTube still has a continuation spinner/renderer waiting
-      const hasContinuation = document.querySelector("ytd-continuation-item-renderer") !== null;
-
-      // Only terminate if no new items loaded after multiple consecutive attempts AND no continuation exists
-      const maxAllowedStalls = hasContinuation ? 5 : 3;
-      if (consecutiveStalls >= maxAllowedStalls) {
-        // End of user history reached
-        break;
-      }
-    }
+    // Generous 1200ms wait per cycle for YouTube network & rendering
+    await new Promise((r) => setTimeout(r, 1200));
   }
 
   if (isCancelled) return;
@@ -218,6 +203,7 @@
   scanControlBox.style.display = "none";
   statusEl.textContent = "Extracting Shorts details...";
   progressInner.style.width = "90%";
+  console.log("[Shorts Collector] Scanning complete. Parsing video elements from DOM...");
 
   // 3. Extract shorts details from page
   const shortsList = [];
@@ -266,9 +252,12 @@
     shortsList.push({ title, url: canonicalUrl });
   }
 
+  console.log(`[Shorts Collector] Extracted ${shortsList.length} distinct Shorts.`);
+
   // 4. Enrich missing titles via public YouTube oEmbed in batches
   const missingItems = shortsList.filter((s) => s.title.startsWith("YouTube Short (") || !s.title);
   if (missingItems.length > 0) {
+    console.log(`[Shorts Collector] Resolving ${missingItems.length} missing titles via oEmbed...`);
     statusEl.textContent = `Resolving titles (${missingItems.length} videos)...`;
     for (let i = 0; i < missingItems.length; i += 6) {
       if (isCancelled) return;
@@ -298,10 +287,12 @@
   // 5. Present extracted items
   if (shortsList.length === 0) {
     statusEl.textContent = "No Shorts found in history. Make sure you are on YouTube Watch History.";
+    console.warn("[Shorts Collector] Zero Shorts found in history.");
     return;
   }
 
-  statusEl.textContent = `Found ${shortsList.length} Shorts in history`;
+  statusEl.textContent = `Successfully extracted ${shortsList.length} Shorts!`;
+  console.log(`%c[Shorts Collector] Ready! Total Shorts: ${shortsList.length}`, "color: #10b981; font-weight: bold; font-size: 13px;");
 
   previewList.style.display = "block";
   previewList.replaceChildren();
@@ -337,6 +328,7 @@
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
     downloadBtn.textContent = "Downloaded!";
+    console.log("[Shorts Collector] JSON file downloaded.");
     setTimeout(() => {
       downloadBtn.textContent = `Download JSON (${shortsList.length} Shorts)`;
     }, 2500);
@@ -347,6 +339,7 @@
     try {
       await navigator.clipboard.writeText(jsonString);
       copyBtn.textContent = "Copied to clipboard!";
+      console.log("[Shorts Collector] JSON copied to clipboard.");
     } catch (err) {
       const ta = document.createElement("textarea");
       ta.value = jsonString;
