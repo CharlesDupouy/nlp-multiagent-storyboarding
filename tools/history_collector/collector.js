@@ -1,11 +1,11 @@
 /**
- * YouTube Shorts Watch History Exporter (COMP 4221 NLP Study) - v2.2 Deep Scan
+ * YouTube Shorts Watch History Exporter (COMP 4221 NLP Study) - v2.3 (90 Target)
  *
  * 100% Trusted-Types and CSP compliant:
  * Uses pure document.createElement, textContent, and appendChild (zero innerHTML sinks).
  */
 (async function runShortsCollector() {
-  console.log("%c[Shorts Collector v2.2] Initialized! Starting deep scan...", "color: #e50914; font-weight: bold; font-size: 13px;");
+  console.log("%c[Shorts Collector v2.3] Initialized! Target: 90 Shorts (3x30 split)...", "color: #e50914; font-weight: bold; font-size: 13px;");
 
   if (!window.location.href.includes("youtube.com")) {
     alert("Please open YouTube first.\n\nNavigate to https://www.youtube.com/feed/history and click this bookmark again.");
@@ -35,7 +35,7 @@
   // Header row
   const header = createEl("div", "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;");
   const titleBox = createEl("div", "font-weight:600;font-size:14px;color:#f8fafc;display:flex;align-items:center;gap:8px;");
-  const badge = createEl("span", "background:#e50914;color:#fff;font-size:10px;font-weight:700;letter-spacing:0.5px;padding:2px 6px;border-radius:4px;text-transform:uppercase;", "Shorts v2.2");
+  const badge = createEl("span", "background:#e50914;color:#fff;font-size:10px;font-weight:700;letter-spacing:0.5px;padding:2px 6px;border-radius:4px;text-transform:uppercase;", "Shorts (Cap 90)");
   const titleText = createEl("span", "", "History Exporter");
   titleBox.appendChild(badge);
   titleBox.appendChild(titleText);
@@ -66,7 +66,7 @@
   container.appendChild(header);
 
   // Status message
-  const statusEl = createEl("div", "font-size:13px;color:#94a3b8;margin-bottom:10px;", "Preparing deep scan...");
+  const statusEl = createEl("div", "font-size:13px;color:#94a3b8;margin-bottom:10px;", "Preparing scan (target: 90 Shorts)...");
   container.appendChild(statusEl);
 
   // Progress Bar
@@ -77,12 +77,12 @@
 
   // Live stop button (visible during scanning)
   const scanControlBox = createEl("div", "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;");
-  const liveCountBadge = createEl("span", "font-size:12px;color:#cbd5e1;font-variant-numeric:tabular-nums;", "0 Shorts found so far");
+  const liveCountBadge = createEl("span", "font-size:12px;color:#cbd5e1;font-variant-numeric:tabular-nums;", "0 / 90 Shorts found");
   const stopEarlyBtn = createEl("button", "background:#1e293b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.08);padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;transition:background 0.15s ease;", "Export Now");
   stopEarlyBtn.onmouseenter = () => { stopEarlyBtn.style.background = "#283548"; };
   stopEarlyBtn.onmouseleave = () => { stopEarlyBtn.style.background = "#1e293b"; };
   stopEarlyBtn.onclick = () => {
-    console.log("[Shorts Collector] User clicked 'Export Now' early button.");
+    console.log("[Shorts Collector] User clicked 'Export Now' button.");
     forceStop = true;
   };
   scanControlBox.appendChild(liveCountBadge);
@@ -104,7 +104,7 @@
   copyBtn.onmouseenter = () => { copyBtn.style.background = "#283548"; };
   copyBtn.onmouseleave = () => { copyBtn.style.background = "#1e293b"; };
 
-  const noteEl = createEl("div", "font-size:11px;color:#64748b;text-align:center;margin-top:2px;", "HKUST COMP 4221 Study • Anonymous & Client-Side");
+  const noteEl = createEl("div", "font-size:11px;color:#64748b;text-align:center;margin-top:2px;", "HKUST COMP 4221 Study • Exactly 90 Shorts (3x30 split)");
 
   actionsBox.appendChild(downloadBtn);
   actionsBox.appendChild(copyBtn);
@@ -157,13 +157,11 @@
     window.dispatchEvent(new Event("scroll"));
   }
 
-  // 2. Deep Dynamic Scrolling
-  // Performs 25 cycles with 1.2s delay between scrolls (~30 seconds total)
-  // Stops early ONLY if TARGET_SHORTS is reached or user clicks "Export Now"
-  const TARGET_SHORTS = 80;
+  // 2. Deep Dynamic Scrolling with 90 Target Cap
+  const TARGET_SHORTS = 90;
   const TOTAL_CYCLES = 25;
 
-  console.log(`[Shorts Collector] Target: ${TARGET_SHORTS} Shorts. Running up to ${TOTAL_CYCLES} scroll cycles...`);
+  console.log(`[Shorts Collector] Target cap: ${TARGET_SHORTS} Shorts. Running up to ${TOTAL_CYCLES} scroll cycles...`);
 
   for (let cycle = 1; cycle <= TOTAL_CYCLES; cycle++) {
     if (isCancelled || forceStop) {
@@ -174,27 +172,27 @@
     const currentCount = countDistinctShortsInDOM();
     const currentTotal = countTotalVideosInDOM();
 
-    liveCountBadge.textContent = `${currentCount} Shorts found`;
-    stopEarlyBtn.textContent = currentCount > 0 ? `Export Now (${currentCount})` : "Export Now";
+    liveCountBadge.textContent = `${Math.min(currentCount, TARGET_SHORTS)} / ${TARGET_SHORTS} Shorts`;
+    stopEarlyBtn.textContent = currentCount > 0 ? `Export Now (${Math.min(currentCount, TARGET_SHORTS)})` : "Export Now";
 
-    const progressPct = Math.min(85, Math.max(5, Math.round((cycle / TOTAL_CYCLES) * 85)));
+    const progressPct = Math.min(85, Math.max(5, Math.round((Math.min(currentCount, TARGET_SHORTS) / TARGET_SHORTS) * 85)));
     progressInner.style.width = `${progressPct}%`;
 
-    statusEl.textContent = `Deep scanning history... (${cycle}/${TOTAL_CYCLES}) • ${currentCount} Shorts`;
+    statusEl.textContent = `Scanning history... cycle ${cycle}/${TOTAL_CYCLES} (${currentCount} in DOM)`;
 
     console.log(
-      `[Shorts Collector] Cycle ${cycle}/${TOTAL_CYCLES}: found ${currentCount} Shorts | ${currentTotal} total video cards | docHeight: ${document.documentElement.scrollHeight}px`
+      `[Shorts Collector] Cycle ${cycle}/${TOTAL_CYCLES}: found ${currentCount} Shorts in DOM | ${currentTotal} total video cards | docHeight: ${document.documentElement.scrollHeight}px`
     );
 
     if (currentCount >= TARGET_SHORTS) {
-      console.log(`[Shorts Collector] Reached target of ${TARGET_SHORTS} Shorts!`);
+      console.log(`[Shorts Collector] Target cap of ${TARGET_SHORTS} Shorts reached! Finalizing.`);
       break;
     }
 
     // Scroll multi-target
     triggerYouTubeScroll();
 
-    // Generous 1200ms wait per cycle for YouTube network & rendering
+    // 1200ms wait per cycle for YouTube network & rendering
     await new Promise((r) => setTimeout(r, 1200));
   }
 
@@ -206,7 +204,7 @@
   console.log("[Shorts Collector] Scanning complete. Parsing video elements from DOM...");
 
   // 3. Extract shorts details from page
-  const shortsList = [];
+  let shortsList = [];
   const seenUrls = new Set();
   const shortAnchors = Array.from(document.querySelectorAll('a[href*="/shorts/"]'));
 
@@ -252,7 +250,13 @@
     shortsList.push({ title, url: canonicalUrl });
   }
 
-  console.log(`[Shorts Collector] Extracted ${shortsList.length} distinct Shorts.`);
+  // Exact cap at 90 items (for 3 x 30 video evaluation splits)
+  if (shortsList.length > TARGET_SHORTS) {
+    console.log(`[Shorts Collector] Trimming ${shortsList.length} items to exact target of ${TARGET_SHORTS} Shorts (3x30 split).`);
+    shortsList = shortsList.slice(0, TARGET_SHORTS);
+  }
+
+  console.log(`[Shorts Collector] Final list: ${shortsList.length} distinct Shorts.`);
 
   // 4. Enrich missing titles via public YouTube oEmbed in batches
   const missingItems = shortsList.filter((s) => s.title.startsWith("YouTube Short (") || !s.title);
@@ -291,8 +295,8 @@
     return;
   }
 
-  statusEl.textContent = `Successfully extracted ${shortsList.length} Shorts!`;
-  console.log(`%c[Shorts Collector] Ready! Total Shorts: ${shortsList.length}`, "color: #10b981; font-weight: bold; font-size: 13px;");
+  statusEl.textContent = `Successfully extracted exactly ${shortsList.length} Shorts!`;
+  console.log(`%c[Shorts Collector] Ready! Total Shorts: ${shortsList.length} (3x30 ready)`, "color: #10b981; font-weight: bold; font-size: 13px;");
 
   previewList.style.display = "block";
   previewList.replaceChildren();
@@ -307,7 +311,7 @@
   });
 
   if (shortsList.length > 5) {
-    const extra = createEl("div", "color:#64748b;font-size:11px;margin-top:6px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.06);", `+ ${shortsList.length - 5} more videos`);
+    const extra = createEl("div", "color:#64748b;font-size:11px;margin-top:6px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.06);", `+ ${shortsList.length - 5} more videos (90 total)`);
     previewList.appendChild(extra);
   }
 
