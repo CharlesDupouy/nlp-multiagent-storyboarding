@@ -887,6 +887,64 @@ class TestPipeline(unittest.TestCase):
         for h in top_headlines:
             self.assertIn(h, draft_prompt)
 
+    def test_writers_room_and_director_retry_on_bad_json_and_rate_limit_bailout(self):
+        import os
+        from unittest.mock import MagicMock, patch
+        from src.agents.writers_room_agent import WritersRoomAgent
+        from src.agents.director_agent import DirectorAgent
+        from src.core.state import SharedState, UserProfile
+        from src.tools.image_tool import search_image_candidates
+
+        # 1. WritersRoomAgent retries once when attempt 1 returns unparseable JSON
+        mock_client = MagicMock()
+        bad_resp = MagicMock()
+        bad_resp.choices = [MagicMock()]
+        bad_resp.choices[0].message.content = "Not valid JSON {"
+        bad_resp.usage = None
+
+        good_wr = MagicMock()
+        good_wr.choices = [MagicMock()]
+        good_wr.choices[0].message.content = (
+            '{"pitches": [{"pitch_id": "pitch1", "title": "Bread Fridge Physics", '
+            '"target_tone": "Curieux", "hook_3s": "Stop!", "concept": "Starch retrogradation.", '
+            '"core_beats": ["b1"], "user_alignment_reason": "Food science"}]}'
+        )
+        good_wr.usage = None
+
+        good_dir = MagicMock()
+        good_dir.choices = [MagicMock()]
+        good_dir.choices[0].message.content = (
+            '{"critiques": [{"pitch_id": "pitch1", "strengths": "Clear", "weaknesses": "None"}], '
+            '"winning_pitch_id": "pitch1", "selection_rationale": "Strong hook.", '
+            '"director_notes": "Keep concrete visuals."}'
+        )
+        good_dir.usage = None
+
+        mock_client.chat.completions.create.side_effect = [bad_resp, good_wr, bad_resp, good_dir]
+
+        st = SharedState(user_profile=UserProfile(interests=["food science"], themes=["myth busting"], raw_summary="French"))
+        st = WritersRoomAgent(model="deepseek-chat", client=mock_client).run(st)
+        self.assertEqual(len(st.candidate_pitches), 1)
+        self.assertEqual(st.candidate_pitches[0]["title"], "Bread Fridge Physics")
+
+        st = DirectorAgent(model="deepseek-chat", client=mock_client).run(st)
+        self.assertEqual(st.selected_pitch["pitch_id"], "pitch1")
+        self.assertEqual(st.director_notes, "Keep concrete visuals.")
+        self.assertEqual(mock_client.chat.completions.create.call_count, 4)
+
+        # 2. Unsplash HTTP 403 short-circuits immediately (only 1 Unsplash HTTP call, no fallback waste)
+        resp_403 = MagicMock()
+        resp_403.status_code = 403
+        resp_403.text = "Rate Limit Exceeded"
+        resp_403.headers = {"X-Ratelimit-Remaining": "0"}
+
+        with patch.dict(os.environ, {"IMAGE_API_PROVIDER": "unsplash", "UNSPLASH_ACCESS_KEY": "fake_u", "PEXELS_API_KEY": ""}, clear=False), \
+             patch("src.tools.image_tool.requests.get", return_value=resp_403) as mock_get:
+            res = search_image_candidates("ancient carved stone wall", fallback_query="stone wall", max_results=4)
+
+        self.assertEqual(mock_get.call_count, 1)
+        self.assertTrue(res[0]["url"].startswith("https://example.com/images/"))
+
 
 if __name__ == "__main__":
     unittest.main()

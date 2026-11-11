@@ -25,6 +25,10 @@ _BANNED_DIRECTIVES = re.compile(
 )
 
 
+class UnsplashRateLimitError(RuntimeError):
+    """Raised when Unsplash rejects a query with HTTP 403/429 rate-limit status."""
+
+
 def clean_stock_query(query: str) -> str:
     """
     Transform editorial/cinematic prompts into clean, physical stock photography terms.
@@ -85,16 +89,20 @@ def search_image_candidates(
                 candidates = _unsplash_fetch_candidates(core_nouns, max_results, unsplash_key)
                 if candidates:
                     return candidates
+        except UnsplashRateLimitError as e:
+            print(f"[TOOL WARNING] Unsplash rate limit reached — skipping fallback retries: {e}")
         except Exception as e:
             print(f"[TOOL WARNING] Unsplash candidate search error: {e}")
 
-    elif provider == "pexels" and pexels_key:
+    if (provider == "pexels" or (provider == "unsplash" and pexels_key)) and pexels_key:
         try:
-            return _pexels_search(cleaned_primary, max_results, pexels_key)
+            candidates = _pexels_search(cleaned_primary, max_results, pexels_key)
+            if candidates:
+                return candidates
         except Exception as e:
             print(f"[TOOL WARNING] Pexels candidate search error: {e}")
 
-    # Fallback to mock images if API fails or key is missing
+    # Fallback to mock images if API fails, rate-limits, or key is missing
     return _mock_search_images(query, max_results)
 
 
@@ -125,6 +133,13 @@ def _unsplash_fetch_candidates(q: str, max_results: int, api_key: str) -> list[d
     }
     resp = requests.get(url, headers=headers, params=params, timeout=10)
     if resp.status_code != 200:
+        detail = (resp.text or "").strip().replace("\n", " ")[:160]
+        remaining = resp.headers.get("X-Ratelimit-Remaining")
+        rate_info = f", remaining={remaining}" if remaining is not None else ""
+        msg = f"HTTP {resp.status_code}{rate_info}: {detail}"
+        if resp.status_code in (403, 429):
+            raise UnsplashRateLimitError(msg)
+        print(f"[TOOL WARNING] Unsplash search error for {q!r}: {msg}")
         return []
 
     data = resp.json()
@@ -155,6 +170,8 @@ def _pexels_search(query: str, max_results: int, api_key: str) -> list[dict[str,
     params = {"query": query, "per_page": max_results}
     resp = requests.get(url, headers=headers, params=params, timeout=10)
     if resp.status_code != 200:
+        detail = (resp.text or "").strip().replace("\n", " ")[:160]
+        print(f"[TOOL WARNING] Pexels search error for {query!r}: HTTP {resp.status_code}: {detail}")
         return []
     data = resp.json()
     results = []

@@ -45,8 +45,30 @@ class WritersRoomAgent(BaseAgent):
             max_tokens=2000,
         )
 
-        pitches_data = _parse_pitches(raw)
+        pitches_data, parse_err = _parse_pitches_checked(raw)
         pitches = pitches_data.get("pitches", [])
+
+        if not pitches:
+            reason = parse_err or "empty 'pitches' array in JSON response"
+            self._log(state, f"Writers' Room attempt 1 returned 0 pitches ({reason}); retrying with strict JSON repair...")
+            retry_prompt = (
+                f"{user_prompt}\n\n"
+                "IMPORTANT RETRY INSTRUCTION: Your previous response could not be parsed as valid JSON "
+                f"({reason}). Return ONLY one valid JSON object with top-level key \"pitches\" containing 3 pitch objects. "
+                "Escape all double quotes inside string values as \\\" or use single quotes/guillemets."
+            )
+            raw_retry = chat_completion(
+                client=self.client,
+                model=self.model,
+                system_prompt=_WRITERS_ROOM_SYSTEM_PROMPT,
+                user_prompt=retry_prompt,
+                temperature=0.4,
+                max_tokens=2500,
+            )
+            pitches_data, parse_err = _parse_pitches_checked(raw_retry)
+            pitches = pitches_data.get("pitches", [])
+            if not pitches:
+                self._log(state, f"[WARNING] Writers' Room retry still produced 0 pitches ({parse_err or 'empty list'}).")
 
         # Ensure fallback pitch IDs
         for i, p in enumerate(pitches):
@@ -83,16 +105,22 @@ Make sure each pitch explores a DIFFERENT topic or angle from the user's profile
 """
 
 
-def _parse_pitches(raw: str) -> dict:
+def _parse_pitches_checked(raw: str) -> tuple[dict, str | None]:
+    """Parse candidate pitches JSON and return (parsed_dict, error_reason_or_None)."""
     try:
         data = extract_json(raw)
         if isinstance(data, dict):
-            return data
+            return data, None
         if isinstance(data, list):
-            return {"pitches": data}
-        return {"pitches": []}
-    except Exception:
-        return {"pitches": []}
+            return {"pitches": data}, None
+        return {"pitches": []}, f"unexpected JSON type {type(data).__name__}"
+    except Exception as exc:
+        return {"pitches": []}, f"{type(exc).__name__}: {exc}"
+
+
+def _parse_pitches(raw: str) -> dict:
+    data, _ = _parse_pitches_checked(raw)
+    return data
 
 
 _WRITERS_ROOM_SYSTEM_PROMPT_DEFAULT = """\

@@ -50,7 +50,26 @@ class DirectorAgent(BaseAgent):
             max_tokens=1500,
         )
 
-        decision_data = _parse_decision(raw)
+        decision_data, parse_err = _parse_decision_checked(raw)
+        if parse_err:
+            self._log(state, f"Director attempt 1 JSON parse failed ({parse_err}); retrying once...")
+            retry_prompt = (
+                f"{user_prompt}\n\n"
+                "IMPORTANT RETRY INSTRUCTION: Return ONLY one valid JSON object matching the rubric schema. "
+                "Escape all internal double quotes properly."
+            )
+            raw_retry = chat_completion(
+                client=self.client,
+                model=self.model,
+                system_prompt=_DIRECTOR_SYSTEM_PROMPT,
+                user_prompt=retry_prompt,
+                temperature=0.3,
+                max_tokens=1500,
+            )
+            decision_data, parse_err = _parse_decision_checked(raw_retry)
+            if parse_err:
+                self._log(state, f"[WARNING] Director retry parse failed ({parse_err}); falling back to pitch1.")
+
         winning_id = decision_data.get("winning_pitch_id", "pitch1")
 
         # Find matching pitch dict
@@ -102,14 +121,27 @@ Critique each pitch, select the SINGLE STRONGEST pitch for production, and write
 """
 
 
-def _parse_decision(raw: str) -> dict:
+_DEFAULT_DECISION = {
+    "winning_pitch_id": "pitch1",
+    "critiques": [],
+    "director_notes": "Focus on high energy and clean pacing.",
+}
+
+
+def _parse_decision_checked(raw: str) -> tuple[dict, str | None]:
+    """Parse Director decision JSON and return (parsed_dict, error_reason_or_None)."""
     try:
         data = extract_json(raw)
         if isinstance(data, dict):
-            return data
-        return {"winning_pitch_id": "pitch1", "critiques": [], "director_notes": "Focus on high energy and clean pacing."}
-    except Exception:
-        return {"winning_pitch_id": "pitch1", "critiques": [], "director_notes": "Focus on high energy and clean pacing."}
+            return data, None
+        return dict(_DEFAULT_DECISION), f"unexpected JSON type {type(data).__name__}"
+    except Exception as exc:
+        return dict(_DEFAULT_DECISION), f"{type(exc).__name__}: {exc}"
+
+
+def _parse_decision(raw: str) -> dict:
+    data, _ = _parse_decision_checked(raw)
+    return data
 
 
 _DIRECTOR_SYSTEM_PROMPT_DEFAULT = """\
