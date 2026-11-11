@@ -58,6 +58,8 @@ class WritersRoomAgent(BaseAgent):
         self._log(state, f"Developed {len(pitches)} candidate pitches:")
         for p in pitches:
             self._log(state, f"  [{p.get('pitch_id')}] '{p.get('title')}' (Tone: {p.get('target_tone')})")
+            if p.get("hook_3s"):
+                self._log(state, f"      3s Hook: \"{p.get('hook_3s')}\"")
 
         return state
 

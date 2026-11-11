@@ -63,7 +63,7 @@ ENGLISH_STOPWORDS = {
 def detect_language(scenes):
     """Auto-detect primary language of scenes (English vs French)."""
     all_text = " ".join(
-        (s.get("audio_cue", "") + " " + s.get("subtitle", "") + " " + s.get("visual_description", ""))
+        (str(s.get("voiceover") or s.get("audio_cue", "")) + " " + s.get("subtitle", "") + " " + s.get("visual_description", "") + " " + s.get("description", ""))
         for s in scenes
     ).lower()
     words = set(re.findall(r"\b[a-zA-Z\u00C0-\u017F']+\b", all_text))
@@ -74,42 +74,49 @@ def detect_language(scenes):
 
 def clean_audio_cue(cue, raw=False):
     """
-    Cleans audio cues into spoken script dialogue:
-    - Strips voice labels and descriptors, e.g. "VO (low, forensic):" or "Voix off (nostalgique) :"
-    - Strips SFX blocks regardless of order (e.g. "SFX: thunk... VO: 'Hello'" or "VO: 'Hello' SFX: thunk")
+    Cleans audio cues or voiceover into pure spoken script dialogue:
+    - Strips bracketed or parenthesized SFX tags (e.g. '[SFX: ...]', '(SFX: ...)')
+    - Strips leading SFX blocks (e.g. 'SFX: bell rings. VO: Hello')
+    - Strips voice labels and descriptors (e.g. 'VO (flat, dead-direct):', 'Voix off :', 'Voiceover:')
+    - Strips trailing SFX blocks (e.g. 'SFX: low hum...', 'SFX : bruit...')
+    - Strips trailing inline SFX mentions (e.g. 'Deep rumble SFX.', 'Grunt SFX, rock crumbling.')
+    - Strips trailing sound effect annotations (e.g. '+ beat de révélation (whoosh)')
     - Extracts dialogue from explicit quotes (« ... », " ... ", ' ... ')
-    - Drops trailing sound effect annotations like '+ beat de révélation (whoosh)'
+    - Normalizes whitespace
     """
     cue = (cue or "").strip()
     if raw or not cue:
         return cue
 
-    # 1) If voice label(s) exist anywhere in the cue, extract speech segments following the voice label(s)
-    voice_pattern = rf"\b{_VOICE_LABELS}(?:\s*\([^)]*\)|\s+[\w\u00C0-\u017F]+)*\s*[:\-]\s*(.*?)(?=\b{_SFX_LABELS}\b\s*[:\-]|\b{_VOICE_LABELS}\b\s*[:\-]|$)"
-    parts = re.findall(voice_pattern, cue, flags=re.I | re.S)
-    if parts:
-        cleaned_parts = []
-        for p in parts:
-            p_clean = p.strip()
-            french_quotes = re.findall(r"«\s*(.*?)\s*»", p_clean, flags=re.S)
-            if french_quotes:
-                cleaned_parts.append(" ".join(french_quotes))
-            else:
-                p_clean = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", p_clean, flags=re.S)
-                cleaned_parts.append(p_clean.strip(_QUOTES + " \n"))
-        text = " ".join(cp for cp in cleaned_parts if cp)
-    else:
-        # 2) No voice label: strip any SFX blocks and trailing annotations
-        text = re.sub(rf"\b{_SFX_LABELS}\b\s*[:\-][^.!?]*[.!?]?", "", cue, flags=re.I)
-        french_quotes = re.findall(r"«\s*(.*?)\s*»", text, flags=re.S)
-        if french_quotes:
-            text = " ".join(french_quotes)
-        else:
-            text = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", text, flags=re.S)
-        text = text.strip(_QUOTES + " \n")
+    s = cue
 
-    text = re.sub(r"\s+", " ", text).strip()
-    return text or cue
+    # 1. Strip bracketed or parenthesized SFX tags anywhere
+    s = re.sub(r"\[(?:SFX|FX|SOUND|BRUITAGE)[^\]]*\]", "", s, flags=re.I)
+    s = re.sub(r"\((?:SFX|FX|SOUND|BRUITAGE)[^)]*\)", "", s, flags=re.I)
+
+    # 2. If SFX is at the very beginning, strip the leading SFX block
+    s = re.sub(r"^(?:SFX|FX|BRUITAGE|MUSIQUE|MUSIC|SOUND)\s*[:\-][^.!?\n]*[.!?]?\s*", "", s, flags=re.I).strip()
+
+    # 3. Strip leading voice/narrator labels with optional parenthetical descriptors
+    voice_prefix = r"^(?:VO|VOIX(?:\s*OFF)?|VOICE(?:\s*OVER)?|VOICEOVER|NARRATEUR|NARRATRICE|NARRATOR|SPEAKER)(?:\s*\([^)]*\))*\s*[:\-]\s*"
+    s = re.sub(voice_prefix, "", s, flags=re.I).strip()
+
+    # 4. Strip trailing text after closing quote (e.g. '...omnipotent.' Frustrated sigh.)
+    s = re.sub(r"([»'\"])\s+(?:[A-Z][a-z0-9\s,–—-]+[.!?]?\s*)+$", r"\1", s)
+
+    # 5. Strip trailing SFX blocks
+    s = re.sub(r"\b(?:SFX|FX|BRUITAGE|MUSIQUE|MUSIC|SOUND)\s*[:\-].*$", "", s, flags=re.I | re.S)
+
+    # 6. Strip trailing inline SFX mentions
+    s = re.sub(r"\s*['\"]?\s*[^'\"\n]*\b(?:SFX|FX)\b[^'\"\n]*\.?\s*$", "", s, flags=re.I)
+
+    # 7. Strip trailing stage direction annotations with '+'
+    s = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", s, flags=re.S)
+
+    # 8. Strip lingering outer quotation marks and whitespace
+    s = s.strip(_QUOTES + " \n")
+    s = re.sub(r"\s+", " ", s).strip()
+    return s or cue
 
 
 # --------------------------------------------------------------------------- #
@@ -397,7 +404,8 @@ def build_scene_clip(scene, idx, tmp, tts, size, args):
     burn_subtitle(img, scene.get("subtitle", "")).save(frame)
 
     # Speech
-    speech = clean_audio_cue(scene.get("audio_cue", ""), raw=args.raw_audio)
+    cue = scene.get("voiceover") or scene.get("audio_cue", "")
+    speech = clean_audio_cue(cue, raw=args.raw_audio)
     print(f"  speech: {speech!r}")
     wav = tmp / f"speech_{idx:03d}.wav"
     try:

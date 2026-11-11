@@ -61,8 +61,16 @@ class DirectorAgent(BaseAgent):
         state.director_critique = decision_data.get("critiques", [])
         state.director_notes = decision_data.get("director_notes", "")
 
+        for c in state.director_critique:
+            if isinstance(c, dict):
+                pid = c.get("pitch_id", "?")
+                verdict = c.get("verdict") or c.get("strengths") or c.get("critique", "")
+                if verdict:
+                    self._log(state, f"  Critique [{pid}]: {str(verdict)[:120]}")
+
         self._log(state, f"🏆 Commissioned winning pitch: [{selected.get('pitch_id')}] '{selected.get('title')}'")
-        self._log(state, f"Directorial Notes: {state.director_notes[:100]}...")
+        if state.director_notes:
+            self._log(state, f"Directorial Notes: {state.director_notes[:180]}{'...' if len(state.director_notes) > 180 else ''}")
 
         return state
 

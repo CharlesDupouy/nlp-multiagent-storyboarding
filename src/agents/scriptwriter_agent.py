@@ -60,10 +60,13 @@ class ScriptwriterAgent(BaseAgent):
             scenes=data.get("scenes", []),
             overall_narrative=data.get("overall_narrative", ""),
         )
+        state.storyboard.sanitize_scenes()
+        total_dur = sum(int(s.get("duration_seconds", 0) or 0) for s in state.storyboard.scenes)
         self._log(
             state,
-            f"Draft created: '{state.storyboard.title}' with {len(state.storyboard.scenes)} scenes.",
+            f"Draft created: '{state.storyboard.title}' ({len(state.storyboard.scenes)} scenes, {total_dur}s).",
         )
+        self._log_scene_outline(state, include_images=False)
         return state
 
     def refine(self, state: SharedState) -> SharedState:
@@ -94,11 +97,22 @@ class ScriptwriterAgent(BaseAgent):
 
         # Programmatically link image_ref -> real image_url
         state.storyboard.resolve_image_urls(state.image_context)
+        total_dur = sum(int(s.get("duration_seconds", 0) or 0) for s in state.storyboard.scenes)
         self._log(
             state,
-            f"Storyboard refined: '{state.storyboard.title}' ({len(state.storyboard.scenes)} scenes aligned with imagery).",
+            f"Storyboard refined: '{state.storyboard.title}' ({len(state.storyboard.scenes)} scenes, {total_dur}s aligned with imagery).",
         )
+        self._log_scene_outline(state, include_images=True)
         return state
+
+    def _log_scene_outline(self, state: SharedState, include_images: bool = False) -> None:
+        """Print a compact per-scene summary showing progress through drafting/refinement."""
+        for s in state.storyboard.scenes:
+            sid = s.get("scene_id", "?")
+            dur = s.get("duration_seconds", "?")
+            sub = str(s.get("subtitle", ""))[:60]
+            img_tag = f" | img={s.get('image_ref') or 'none'}" if include_images else ""
+            self._log(state, f"  Scene {sid} ({dur}s{img_tag}): \"{sub}\"")
 
     def run(self, state: SharedState) -> SharedState:
         """
@@ -233,14 +247,19 @@ Core Philosophy:
 - Deliver an instant 3-second hook that halts the scroll.
 - Ensure narrative progression: each scene must reveal new information, escalate stakes, or provide visual contrast.
 - Subtitles: Punchy, memorable on-screen text (max 12 words per cut, formatted for mobile).
-- Audio cues: Charismatic voiceover lines, dynamic sound effects, or musical beats.
+- Voiceover: Pure spoken narrative dialogue or voiceover lines only. NO sound effects (SFX) and NO music cues.
 - Language: Write the script in the primary language of the user's profile/history.
 
-CRITICAL NEGATIVE CONSTRAINTS (NO PLACEHOLDERS):
-- NEVER write placeholder, evasive, or meta descriptions in subtitles or audio cues.
+CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO SFX, NO PLACEHOLDERS):
+- STRICTLY NO SOUND EFFECTS (SFX) OR MUSIC: Sound effects are NOT supported in this project.
+  - FORBIDDEN: NEVER write "SFX: ...", "FX: ...", "(whoosh)", "(dramatic chord)", "(camera click)", or any sound effect descriptions.
+- STRICTLY NO STAGE LABELS OR PREFIXES:
+  - FORBIDDEN: NEVER write "VO:", "VO (...):", "Voix off:", "Narrator:", "Host:", "Speaker:", etc.
+- STRICTLY NO PLACEHOLDER OR EVASIVE DESCRIPTIONS:
   - FORBIDDEN: "A character says an innocent line...", "Zoom on the key quote...", "Explains the double meaning..."
-  - REQUIRED: You MUST invent or quote the EXACT words verbatim (e.g., "Voix off: 'Maman, pourquoi le monsieur a une carotte dans la poche ?'").
-- Every scene's `subtitle` and `audio_cue` must contain the actual spoken text, ready to be read by TTS or an actor.
+- REQUIRED: The "voiceover" field must contain ONLY the pure verbatim spoken words to be read aloud by Text-To-Speech.
+  - EXAMPLE OF CORRECT VOICEOVER: "That warning label isn't for you. It's for about one in twelve thousand people."
+  - EXAMPLE OF FORBIDDEN VOICEOVER: "VO (flat): 'That warning label isn't for you.' SFX: turntable hum"
 
 Return ONLY valid JSON with this structure:
 {
@@ -251,7 +270,7 @@ Return ONLY valid JSON with this structure:
       "scene_id": 1,
       "description": "Visual scene description: authentic action, dynamic camera movement, distinct visual elements",
       "subtitle": "Punchy on-screen caption (max 12 words)",
-      "audio_cue": "Voiceover line or music/SFX cue",
+      "voiceover": "Pure spoken words to be read aloud by voiceover (NO 'VO:', NO SFX, NO music cues)",
       "duration_seconds": 10
     }
   ]
@@ -272,11 +291,16 @@ Refine the scenes to anchor your entertaining narrative in the real visual evide
 3. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
 4. Language: Keep the same language as the draft.
 
-CRITICAL NEGATIVE CONSTRAINTS (NO PLACEHOLDERS):
-- NEVER write placeholder, evasive, or meta descriptions in subtitles or audio cues.
+CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO SFX, NO PLACEHOLDERS):
+- STRICTLY NO SOUND EFFECTS (SFX) OR MUSIC: Sound effects are NOT supported in this project.
+  - FORBIDDEN: NEVER write "SFX: ...", "FX: ...", "(whoosh)", "(dramatic chord)", "(camera click)", or any sound effect descriptions.
+- STRICTLY NO STAGE LABELS OR PREFIXES:
+  - FORBIDDEN: NEVER write "VO:", "VO (...):", "Voix off:", "Narrator:", "Host:", "Speaker:", etc.
+- STRICTLY NO PLACEHOLDER OR EVASIVE DESCRIPTIONS:
   - FORBIDDEN: "A character says an innocent line...", "Zoom on the key quote...", "Explains the double meaning..."
-  - REQUIRED: You MUST invent or quote the EXACT words verbatim (e.g., "Voix off: 'Maman, pourquoi le monsieur a une carotte dans la poche ?'").
-- Every scene's `subtitle` and `audio_cue` must contain the actual spoken text, ready to be read by TTS or an actor.
+- REQUIRED: The "voiceover" field must contain ONLY the pure verbatim spoken words to be read aloud by Text-To-Speech.
+  - EXAMPLE OF CORRECT VOICEOVER: "That warning label isn't for you. It's for about one in twelve thousand people."
+  - EXAMPLE OF FORBIDDEN VOICEOVER: "VO (flat): 'That warning label isn't for you.' SFX: turntable hum"
 
 Return ONLY valid JSON with this structure:
 {
@@ -287,7 +311,7 @@ Return ONLY valid JSON with this structure:
       "scene_id": 1,
       "description": "Visual scene description aligned with the real-world image asset",
       "subtitle": "Punchy on-screen caption",
-      "audio_cue": "Charismatic voiceover line or sound effect",
+      "voiceover": "Pure spoken words to be read aloud by voiceover (NO 'VO:', NO SFX, NO music cues)",
       "image_ref": "img1",
       "duration_seconds": 10
     }

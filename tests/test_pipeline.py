@@ -201,7 +201,7 @@ class TestPipeline(unittest.TestCase):
         from src.agents.scriptwriter_agent import _DRAFT_SYSTEM_PROMPT, _REFINE_SYSTEM_PROMPT
         from baseline.single_agent_baseline import _BASELINE_SYSTEM_PROMPT
 
-        required_phrase = "CRITICAL NEGATIVE CONSTRAINTS (NO PLACEHOLDERS)"
+        required_phrase = "CRITICAL NEGATIVE CONSTRAINTS"
         forbidden_example = "A character says an innocent line"
 
         for prompt_name, prompt_text in [
@@ -210,6 +210,7 @@ class TestPipeline(unittest.TestCase):
             ("baseline", _BASELINE_SYSTEM_PROMPT),
         ]:
             self.assertIn(required_phrase, prompt_text, f"{prompt_name} missing negative constraints header")
+            self.assertIn("NO PLACEHOLDERS", prompt_text, f"{prompt_name} missing no placeholders clause")
             self.assertIn(forbidden_example, prompt_text, f"{prompt_name} missing forbidden example")
 
     def test_search_images_per_page(self):
@@ -389,7 +390,7 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("Visual: Macro shot of a wine chalkboard menu.", rendered)
         self.assertIn("Visual Asset Photo: Handwritten wine menu board behind glass", rendered)
         self.assertIn("Subtitle: This menu is a test.", rendered)
-        self.assertIn("Audio: VO: Listen closely.", rendered)
+        self.assertIn("Voiceover: VO: Listen closely.", rendered)
         self.assertNotIn("https://", rendered)
         self.assertNotIn("secret_url", rendered)
         self.assertNotIn("John Doe", rendered)  # photographer attribution stripped
@@ -417,7 +418,7 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("Visual: Hands folding croissant dough.", rendered_bl)
         self.assertIn("Visual Asset Photo: Person folding pastry dough on marble surface", rendered_bl)
         self.assertIn("Subtitle: Fold it three times.", rendered_bl)
-        self.assertIn("Audio: VO: Fold precisely.", rendered_bl)
+        self.assertIn("Voiceover: VO: Fold precisely.", rendered_bl)
         self.assertNotIn("https://", rendered_bl)
         self.assertNotIn("baseline_image", rendered_bl)
 
@@ -493,6 +494,190 @@ class TestPipeline(unittest.TestCase):
                 re.match(r"^baseline_storyboard_charles_\d{8}_\d{6}\.json$", filename),
                 f"Filename '{filename}' must follow universal naming convention"
             )
+
+    def test_clean_voiceover_and_markdown(self):
+        from src.core.state import clean_voiceover, SharedState, Storyboard
+
+        # 1. Test clean_voiceover strips VO labels, SFX, and outer quotes
+        raw1 = 'VO (flat, dead-direct, no music): "That warning label isn\'t for you. It\'s for about one in twelve thousand people." SFX: low turntable hum, a single sharp camera-shutter click on the punch-in.'
+        self.assertEqual(
+            clean_voiceover(raw1),
+            "That warning label isn't for you. It's for about one in twelve thousand people."
+        )
+
+        raw2 = "Voiceover: 'Can an all-powerful God create a stone so heavy that even He cannot lift it?' Deep rumble SFX."
+        self.assertEqual(
+            clean_voiceover(raw2),
+            "Can an all-powerful God create a stone so heavy that even He cannot lift it?"
+        )
+
+        raw3 = "Voix off : « Regardez ce stylo, c'est une légende. » SFX : clic métallique"
+        self.assertEqual(
+            clean_voiceover(raw3),
+            "Regardez ce stylo, c'est une légende."
+        )
+
+        # 2. Test Storyboard.sanitize_scenes populates voiceover and audio_cue
+        sb = Storyboard(
+            title="Test Voiceover Storyboard",
+            scenes=[
+                {
+                    "scene_id": 1,
+                    "description": "A close up on a soda can",
+                    "subtitle": "Warning label",
+                    "voiceover": raw1,
+                    "duration_seconds": 10,
+                }
+            ]
+        )
+        sb.sanitize_scenes()
+        self.assertEqual(
+            sb.scenes[0]["voiceover"],
+            "That warning label isn't for you. It's for about one in twelve thousand people."
+        )
+        self.assertEqual(
+            sb.scenes[0]["audio_cue"],
+            "That warning label isn't for you. It's for about one in twelve thousand people."
+        )
+
+        # 3. Test markdown output format uses - **Voiceover:**
+        state = SharedState(storyboard=sb, run_id="test_vo_md")
+        md = state.to_markdown()
+        self.assertIn("- **Voiceover:** That warning label isn't for you.", md)
+        self.assertNotIn("- **Audio / Voiceover:**", md)
+        self.assertNotIn("SFX:", md)
+        self.assertNotIn("VO:", md)
+
+    def test_reasoning_effort_config_and_llm_client(self):
+        import os
+        from unittest.mock import MagicMock
+        from src.orchestrator import Orchestrator
+        from src.core.llm_client import (
+            chat_completion,
+            get_reasoning_effort,
+            set_reasoning_effort,
+            reset_token_usage,
+            get_token_usage,
+        )
+
+        prev_effort = get_reasoning_effort()
+        prev_env = os.environ.get("LLM_REASONING_EFFORT")
+        try:
+            # 1. Config loads reasoning_effort="low"
+            orch = Orchestrator.from_config("configs/config.yaml")
+            self.assertEqual(orch.reasoning_effort, "low")
+            self.assertEqual(get_reasoning_effort(), "low")
+
+            mock_client = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.choices = [MagicMock()]
+            mock_resp.choices[0].message.content = "ok"
+            mock_resp.usage.prompt_tokens = 100
+            mock_resp.usage.completion_tokens = 250
+            mock_resp.usage.completion_tokens_details.reasoning_tokens = 180
+            mock_client.chat.completions.create.return_value = mock_resp
+
+            reset_token_usage()
+
+            # 2. Reasoner receives reasoning_effort="low", max_tokens>=8192, no temperature
+            chat_completion(mock_client, "deepseek-reasoner", "sys", "usr", max_tokens=1500)
+            kwargs_reasoner = mock_client.chat.completions.create.call_args.kwargs
+            self.assertEqual(kwargs_reasoner.get("reasoning_effort"), "low")
+            self.assertEqual(kwargs_reasoner.get("max_tokens"), 8192)
+            self.assertNotIn("temperature", kwargs_reasoner)
+
+            usage = get_token_usage()
+            self.assertEqual(usage["reasoning_tokens"], 180)
+            self.assertEqual(usage["completion_tokens"], 250)
+
+            # 3. Non-reasoner omits reasoning_effort and passes temperature
+            chat_completion(mock_client, "deepseek-chat", "sys", "usr", temperature=0.4, max_tokens=1000)
+            kwargs_chat = mock_client.chat.completions.create.call_args.kwargs
+            self.assertNotIn("reasoning_effort", kwargs_chat)
+            self.assertEqual(kwargs_chat.get("temperature"), 0.4)
+            self.assertEqual(kwargs_chat.get("max_tokens"), 1000)
+
+            # 4. reasoning_effort="none" disables thinking constraints on reasoner
+            os.environ["LLM_REASONING_EFFORT"] = "none"
+            chat_completion(mock_client, "deepseek-reasoner", "sys", "usr", temperature=0.5, max_tokens=1200)
+            kwargs_none = mock_client.chat.completions.create.call_args.kwargs
+            self.assertEqual(kwargs_none.get("reasoning_effort"), "none")
+            self.assertEqual(kwargs_none.get("max_tokens"), 1200)
+            self.assertEqual(kwargs_none.get("temperature"), 0.5)
+        finally:
+            if prev_env is None:
+                os.environ.pop("LLM_REASONING_EFFORT", None)
+            else:
+                os.environ["LLM_REASONING_EFFORT"] = prev_env
+            set_reasoning_effort(prev_effort)
+
+    def test_orchestrator_end_to_end_progress_logs(self):
+        import io
+        import tempfile
+        from contextlib import redirect_stdout
+        from pathlib import Path
+        from unittest.mock import MagicMock, patch
+        from src.orchestrator import Orchestrator
+
+        # Ordered mock responses for the 8 LLM calls across Phases 1..7:
+        # 1. Profiler R1, 2. Profiler R2, 3. WritersRoom, 4. Director,
+        # 5. KnowledgeRetriever, 6. Scriptwriter Draft,
+        # 7. ArtDirector Queries, 8. ArtDirector Selection, 9. Scriptwriter Refine
+        responses = [
+            '{"preliminary_interests": ["origami", "math"], "preliminary_themes": ["paper folding"], "investigate_targets": [{"vid_id": "vid1", "reason": "Check math angle"}]}',
+            '{"interests": ["origami math"], "themes": ["exponential growth"], "preferred_style": "curiosity", "raw_summary": "Loves paper math puzzles.", "investigated_insights": ["Folding 42 times"]}',
+            '{"pitches": [{"pitch_id": "pitch1", "title": "Fold to the Moon", "target_tone": "Curious", "hook_3s": "Grab one sheet of paper.", "concept": "42 folds math", "core_beats": ["Hook", "Math", "Payoff"]}]}',
+            '{"winning_pitch_id": "pitch1", "critiques": [{"pitch_id": "pitch1", "verdict": "Sharp visual hook."}], "director_notes": "Keep it visual and crisp."}',
+            '{"queries": [{"query": "exponential paper folding math", "domain": "technical", "rationale": "Verify thickness math"}]}',
+            '{"title": "Fold to the Moon", "overall_narrative": "Math puzzle.", "scenes": [{"scene_id": 1, "description": "White paper on wood desk", "subtitle": "Forty-two folds.", "voiceover": "One sheet of paper can reach the Moon.", "duration_seconds": 10}]}',
+            '{"queries": [{"scene_id": 1, "primary_query": "white paper desk", "fallback_query": "paper"}]}',
+            '{"selections": [{"scene_id": 1, "selected_candidate_id": "cand1"}]}',
+            '{"title": "Fold to the Moon", "overall_narrative": "Math puzzle.", "scenes": [{"scene_id": 1, "description": "White paper on wood desk", "subtitle": "Forty-two folds.", "voiceover": "One sheet of paper can reach the Moon.", "image_ref": "img1", "duration_seconds": 10}]}',
+        ]
+
+        mock_client = MagicMock()
+        mock_msgs = []
+        for body in responses:
+            r = MagicMock()
+            r.choices = [MagicMock()]
+            r.choices[0].message.content = body
+            r.usage.prompt_tokens = 50
+            r.usage.completion_tokens = 80
+            r.usage.completion_tokens_details.reasoning_tokens = 20
+            mock_msgs.append(r)
+        mock_client.chat.completions.create.side_effect = mock_msgs
+
+        with tempfile.TemporaryDirectory() as tmp_dir, \
+             patch("src.orchestrator.get_client", return_value=mock_client), \
+             patch("src.agents.profiler_agent.get_video_transcript", return_value="Fold a sheet 42 times."), \
+             patch("src.agents.profiler_agent.get_video_metadata", return_value={"author": "MathChannel"}), \
+             patch("src.agents.knowledge_retriever_agent.search_knowledge", return_value=[{"headline": "Exponential Paper Folding", "summary": "0.1mm * 2^42 > 384,400km", "url": "https://example.com"}]), \
+             patch("src.agents.art_director_agent.search_image_candidates", return_value=[{"candidate_id": "cand1", "url": "https://images.unsplash.com/photo-test", "alt_text": "Paper", "description": "White paper on desk"}]):
+
+            orch = Orchestrator(
+                profiler_model="deepseek-chat",
+                retriever_model="deepseek-chat",
+                image_model="deepseek-chat",
+                scriptwriter_model="deepseek-reasoner",
+                writers_room_model="deepseek-reasoner",
+                director_model="deepseek-reasoner",
+                reasoning_effort="low",
+                output_dir=tmp_dir,
+            )
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                state = orch.run([{"title": "Folding Paper", "url": "https://youtube.com/shorts/abc"}], user_id="test_prog")
+
+            out = buf.getvalue()
+            for phase_idx in range(1, 8):
+                self.assertIn(f"[Phase {phase_idx}/7]", out)
+                self.assertIn(f"Phase {phase_idx}/7 done", out)
+            self.assertIn("reasoning_effort=low", out)
+            self.assertIn("3s Hook:", out)
+            self.assertIn("Draft created:", out)
+            self.assertIn("img=img1", out)
+            self.assertTrue(Path(state.output_json_path).exists())
 
 
 if __name__ == "__main__":

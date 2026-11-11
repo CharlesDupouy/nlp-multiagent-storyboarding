@@ -83,11 +83,13 @@ Remember: stock search engines match physical objects and places, NOT camera ang
         # 2. Tool Candidate Retrieval Pass: Fetch candidate photos per scene
         # -------------------------------------------------------------------
         scene_candidates_map: dict[int, list[dict[str, Any]]] = {}
-        for item in scene_queries:
+        total_sq = len(scene_queries)
+        for q_idx, item in enumerate(scene_queries, 1):
             scene_id = item.get("scene_id")
             primary_q = item.get("primary_query") or item.get("query", "")
             fallback_q = item.get("fallback_query", "")
 
+            self._log(state, f"Fetching photo candidates ({q_idx}/{total_sq}) for Scene {scene_id}: '{primary_q}'")
             candidates = search_image_candidates(
                 query=primary_q,
                 fallback_query=fallback_q,
@@ -96,7 +98,7 @@ Remember: stock search engines match physical objects and places, NOT camera ang
             scene_candidates_map[scene_id] = candidates
             self._log(
                 state,
-                f"Scene {scene_id} [{primary_q}]: Retrieved {len(candidates)} photo candidates."
+                f"  -> Retrieved {len(candidates)} photo candidate(s) for Scene {scene_id}."
             )
 
         # -------------------------------------------------------------------

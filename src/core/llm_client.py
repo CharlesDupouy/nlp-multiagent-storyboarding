@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
+import time
 from typing import Any
 
 from openai import OpenAI
@@ -22,12 +24,32 @@ try:
 except ImportError:
     pass
 
+# Default reasoning effort for reasoning models ("none", "low", "high", "max")
+_DEFAULT_REASONING_EFFORT: str | None = "low"
+
 # Global token accounting for reproducibility and cost auditing
 _TOKEN_USAGE = {
     "prompt_tokens": 0,
     "completion_tokens": 0,
+    "reasoning_tokens": 0,
     "total_calls": 0,
 }
+
+
+def set_reasoning_effort(effort: str | None) -> None:
+    """Set the default reasoning effort level ('none', 'low', 'high', 'max', or None)."""
+    global _DEFAULT_REASONING_EFFORT
+    _DEFAULT_REASONING_EFFORT = (
+        effort.strip().lower() if isinstance(effort, str) and effort.strip() else None
+    )
+
+
+def get_reasoning_effort() -> str | None:
+    """Return effective default reasoning effort (LLM_REASONING_EFFORT env overrides config)."""
+    env_val = os.getenv("LLM_REASONING_EFFORT")
+    if env_val and env_val.strip():
+        return env_val.strip().lower()
+    return _DEFAULT_REASONING_EFFORT
 
 
 def get_token_usage() -> dict[str, int]:
@@ -39,6 +61,7 @@ def reset_token_usage() -> None:
     """Reset the session token usage counter to zero."""
     _TOKEN_USAGE["prompt_tokens"] = 0
     _TOKEN_USAGE["completion_tokens"] = 0
+    _TOKEN_USAGE["reasoning_tokens"] = 0
     _TOKEN_USAGE["total_calls"] = 0
 
 
@@ -168,6 +191,7 @@ def chat_completion(
     user_prompt: str,
     temperature: float = 0.7,
     max_tokens: int = 2048,
+    reasoning_effort: str | None = None,
     **kwargs: Any,
 ) -> str:
     """
@@ -178,12 +202,18 @@ def chat_completion(
     """
     # Allow global environment override for testing if LLM_MODEL_OVERRIDE is set
     resolved_model = os.getenv("LLM_MODEL_OVERRIDE") or model
+    model_lower = resolved_model.lower()
+    is_reasoner = (
+        any(tok in model_lower for tok in ("reasoner", "v4-pro"))
+        or model_lower.startswith(("o1", "o3"))
+    )
 
-    is_reasoner = "reasoner" in resolved_model.lower() or resolved_model.lower().startswith(("o1", "o3"))
+    effective_effort = reasoning_effort or get_reasoning_effort()
+    thinking_active = is_reasoner and effective_effort != "none"
 
     # For reasoning models, reasoning tokens count against completion limit.
     # Ensure sufficient token headroom (minimum 8192) to prevent output truncation.
-    call_max_tokens = max(max_tokens, 8192) if is_reasoner else max_tokens
+    call_max_tokens = max(max_tokens, 8192) if thinking_active else max_tokens
 
     call_kwargs: dict[str, Any] = {
         "model": resolved_model,
@@ -195,16 +225,52 @@ def chat_completion(
         **kwargs,
     }
 
-    # Only pass temperature if supported (reasoning models ignore or disallow temperature)
-    if not is_reasoner:
+    if is_reasoner and effective_effort:
+        call_kwargs["reasoning_effort"] = effective_effort
+
+    # Only pass temperature if thinking mode is inactive (reasoning models ignore/disallow it)
+    if not thinking_active:
         call_kwargs["temperature"] = temperature
 
-    response = client.chat.completions.create(**call_kwargs)
+    effort_label = f", effort={effective_effort}" if (is_reasoner and effective_effort) else ""
+    print(f"   ⏳ [LLM] Calling {resolved_model}{effort_label}...", flush=True)
 
-    # Accumulate token usage if returned by the API
+    t0 = time.time()
+    stop_ticker = threading.Event()
+
+    def _heartbeat() -> None:
+        while not stop_ticker.wait(5.0):
+            elapsed = int(time.time() - t0)
+            print(f"   ⏱️  [LLM] Still working on {resolved_model} ({elapsed}s elapsed)...", flush=True)
+
+    ticker = threading.Thread(target=_heartbeat, daemon=True)
+    ticker.start()
+    try:
+        response = client.chat.completions.create(**call_kwargs)
+    finally:
+        stop_ticker.set()
+        ticker.join(timeout=0.2)
+
+    elapsed_s = time.time() - t0
+
+    # Accumulate token usage if returned by the API (guard against MagicMock in tests)
+    p_tok = c_tok = r_tok = 0
     if hasattr(response, "usage") and response.usage:
-        _TOKEN_USAGE["prompt_tokens"] += getattr(response.usage, "prompt_tokens", 0) or 0
-        _TOKEN_USAGE["completion_tokens"] += getattr(response.usage, "completion_tokens", 0) or 0
+        raw_p = getattr(response.usage, "prompt_tokens", 0)
+        raw_c = getattr(response.usage, "completion_tokens", 0)
+        details = getattr(response.usage, "completion_tokens_details", None)
+        raw_r = getattr(details, "reasoning_tokens", 0) if details is not None else 0
+
+        p_tok = raw_p if isinstance(raw_p, int) else 0
+        c_tok = raw_c if isinstance(raw_c, int) else 0
+        r_tok = raw_r if isinstance(raw_r, int) else 0
+
+        _TOKEN_USAGE["prompt_tokens"] += p_tok
+        _TOKEN_USAGE["completion_tokens"] += c_tok
+        _TOKEN_USAGE["reasoning_tokens"] += r_tok
         _TOKEN_USAGE["total_calls"] += 1
+
+    r_info = f", {r_tok:,} reasoning" if r_tok > 0 else ""
+    print(f"   ✓ [LLM] {resolved_model} finished in {elapsed_s:.1f}s ({p_tok:,} in / {c_tok:,} out{r_info})", flush=True)
 
     return response.choices[0].message.content or ""

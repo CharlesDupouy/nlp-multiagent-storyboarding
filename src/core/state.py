@@ -10,9 +10,55 @@ ScriptwriterAgent to produce the final storyboard.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+
+def clean_voiceover(text: str) -> str:
+    """
+    Cleans audio/voiceover text into pure spoken dialogue ready for TTS:
+    - Strips bracketed or parenthesized SFX tags (e.g. '[SFX: ...]', '(SFX: ...)')
+    - Strips leading SFX blocks (e.g. 'SFX: bell rings. VO: Hello')
+    - Strips leading voice/narrator labels with optional parenthetical descriptors
+      (e.g. 'VO (flat, dead-direct):', 'Voix off :', 'Voiceover: ')
+    - Strips trailing SFX blocks (e.g. 'SFX: low hum...', 'SFX : bruit...')
+    - Strips trailing inline SFX mentions (e.g. 'Deep rumble SFX.', 'Grunt SFX, rock crumbling.')
+    - Strips trailing stage direction annotations with '+' (e.g. '+ beat de révélation')
+    - Strips lingering outer quotation marks and normalizes whitespace
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    s = text.strip()
+
+    # 1. Strip bracketed or parenthesized SFX tags anywhere
+    s = re.sub(r"\[(?:SFX|FX|SOUND|BRUITAGE)[^\]]*\]", "", s, flags=re.I)
+    s = re.sub(r"\((?:SFX|FX|SOUND|BRUITAGE)[^)]*\)", "", s, flags=re.I)
+
+    # 2. If SFX is at the very beginning, strip the leading SFX block
+    s = re.sub(r"^(?:SFX|FX|BRUITAGE|MUSIQUE|MUSIC|SOUND)\s*[:\-][^.!?\n]*[.!?]?\s*", "", s, flags=re.I).strip()
+
+    # 3. Strip leading voice/narrator labels with optional parenthetical descriptors
+    voice_prefix = r"^(?:VO|VOIX(?:\s*OFF)?|VOICE(?:\s*OVER)?|VOICEOVER|NARRATEUR|NARRATRICE|NARRATOR|SPEAKER)(?:\s*\([^)]*\))*\s*[:\-]\s*"
+    s = re.sub(voice_prefix, "", s, flags=re.I).strip()
+
+    # 4. Strip trailing text after closing quote (e.g. '...omnipotent.' Frustrated sigh.)
+    s = re.sub(r"([»'\"])\s+(?:[A-Z][a-z0-9\s,–—-]+[.!?]?\s*)+$", r"\1", s)
+
+    # 5. Strip trailing SFX blocks
+    s = re.sub(r"\b(?:SFX|FX|BRUITAGE|MUSIQUE|MUSIC|SOUND)\s*[:\-].*$", "", s, flags=re.I | re.S)
+
+    # 6. Strip trailing inline SFX mentions
+    s = re.sub(r"\s*['\"]?\s*[^'\"\n]*\b(?:SFX|FX)\b[^'\"\n]*\.?\s*$", "", s, flags=re.I)
+
+    # 7. Strip trailing stage direction annotations with '+'
+    s = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", s, flags=re.S)
+
+    # 8. Strip lingering outer quotation marks and whitespace
+    s = s.strip("'\"\u2018\u2019\u201c\u201d\u00ab\u00bb` ")
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
 
 
 @dataclass
@@ -84,18 +130,31 @@ class Storyboard:
     #   "scene_id": int,
     #   "description": str,       # visual description
     #   "subtitle": str,          # on-screen text / caption
-    #   "audio_cue": str,         # voiceover or music note
+    #   "voiceover": str,         # pure spoken dialogue to be read aloud (NO 'VO:', NO SFX)
+    #   "audio_cue": str,         # backward-compatible alias of voiceover
     #   "image_ref": str | None,  # symbolic identifier, e.g. "img1"
     #   "image_url": str | None,  # programmatically resolved from image_ref
     #   "duration_seconds": int,
     # }
     overall_narrative: str = ""
 
+    def sanitize_scenes(self) -> None:
+        """
+        Ensure every scene has pure voiceover text (NO 'VO:', NO SFX, NO music cues).
+        Sets 'voiceover' as primary and keeps 'audio_cue' as backward-compatible alias.
+        """
+        for scene in self.scenes:
+            vo = scene.get("voiceover") or scene.get("audio_cue", "")
+            cleaned = clean_voiceover(vo)
+            scene["voiceover"] = cleaned
+            scene["audio_cue"] = cleaned
+
     def resolve_image_urls(self, image_context: ImageContext) -> None:
         """
         Programmatically resolve image_ref ('img1', 'img2') to real image_url.
         Ensures the LLM never has to handle or hallucinate raw URLs.
         """
+        self.sanitize_scenes()
         img_map = image_context.get_image_map()
         for scene in self.scenes:
             ref = scene.get("image_ref")
@@ -144,7 +203,7 @@ class SharedState:
     def log(self, message: str) -> None:
         """Append a message to the pipeline trace log."""
         self.pipeline_log.append(message)
-        print(f"[PIPELINE] {message}")
+        print(f"[PIPELINE] {message}", flush=True)
 
     def to_dict(self) -> dict:
         """Serialize the full state to a plain dict (for saving to JSON)."""
@@ -209,14 +268,14 @@ class SharedState:
             dur = s.get("duration_seconds", "?")
             desc = s.get("description", "")
             sub = s.get("subtitle", "")
-            audio = s.get("audio_cue", "")
+            voiceover = clean_voiceover(s.get("voiceover") or s.get("audio_cue", ""))
             img_ref = s.get("image_ref")
             img_url = s.get("image_url")
 
             md_lines.append(f"### Scene {scene_id} ({dur}s)")
             md_lines.append(f"- **Visual Description:** {desc}")
             md_lines.append(f"- **Subtitle (On-screen):** *\"{sub}\"*")
-            md_lines.append(f"- **Audio / Voiceover:** {audio}")
+            md_lines.append(f"- **Voiceover:** {voiceover}")
             if img_url:
                 md_lines.append(f"- **Image Asset:** [`{img_ref or 'asset'}`]({img_url})")
             elif img_ref:

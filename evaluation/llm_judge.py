@@ -92,15 +92,15 @@ METRICS = {
     ),
     "completeness": (
         "Whether the storyboard fully specifies a producible short video: scene descriptions, "
-        "subtitles, AND audio cues.\n"
+        "subtitles, AND voiceover.\n"
         "1 = major components missing or only a vague outline.\n"
-        "2 = several scenes lack subtitles or audio, or key details are missing.\n"
+        "2 = several scenes lack subtitles or voiceover, or key details are missing.\n"
         "3 = all components present but thin or uneven.\n"
         "4 = complete and specific, minor gaps.\n"
-        "5 = fully specified for every scene (visuals, subtitles, audio), ready to produce."
+        "5 = fully specified for every scene (visuals, subtitles, voiceover), ready to produce."
     ),
     "coherence": (
-        "Narrative flow and consistency: do scenes, subtitles and audio fit together as one "
+        "Narrative flow and consistency: do scenes, subtitles and voiceover fit together as one "
         "watchable short with a hook and a payoff?\n"
         "1 = disjointed or contradictory.\n"
         "2 = weak flow; scenes feel unconnected.\n"
@@ -214,7 +214,7 @@ For each criterion, assign a grade on 5 (1 to 5 integer scale) to Storyboard A a
 
 1. relevance: How well the storyboard connects to ANY genuine interest cluster in the watch history (Multi-Facet Relevance).
 2. creativity: Concept novelty, distinctive hook/angle. Penalize direct remakes/rehashes of watched videos (Anti-Regurgitation Penalty: CAP at 2/5).
-3. completeness: Full specification of visual descriptions, punchy subtitles, and audio cues for every scene (1-5).
+3. completeness: Full specification of visual descriptions, punchy subtitles, and voiceover for every scene (1-5).
 4. coherence: Narrative flow, progression, hook-to-payoff arc (1-5).
 5. visual_grounding: How faithfully the retrieved visual assets ('Visual Asset Photo') illustrate each scene's desired visual description (1-5).
 Overall: Which video would this specific user prefer to watch in their feed?
@@ -268,7 +268,7 @@ def render_storyboard(data: dict) -> str:
         dur = s.get("duration_seconds", "?")
         desc = s.get("description", "")
         subtitle = s.get("subtitle", "")
-        audio = s.get("audio_cue", "")
+        voiceover = s.get("voiceover") or s.get("audio_cue", "")
 
         # Extract metadata retrieved strictly from the image link / source website
         ref = s.get("image_ref")
@@ -294,7 +294,7 @@ def render_storyboard(data: dict) -> str:
         if image_desc:
             lines.append(f"  Visual Asset Photo: {image_desc}")
         lines.append(f"  Subtitle: {subtitle}")
-        lines.append(f"  Audio: {audio}")
+        lines.append(f"  Voiceover: {voiceover}")
     return "\n".join(lines)
 
 

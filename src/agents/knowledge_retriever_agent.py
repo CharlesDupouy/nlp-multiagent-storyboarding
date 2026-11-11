@@ -102,10 +102,11 @@ Brainstorm {self.num_queries} specific, compelling search queries across news, l
 
         # 2. Multi-Tiered Tool Execution Pass
         all_snippets: list[dict[str, str]] = []
-        for rq in research_queries:
+        total_q = len(research_queries)
+        for q_idx, rq in enumerate(research_queries, 1):
             q = rq.get("query", "")
             domain = rq.get("domain", "auto")
-            self._log(state, f"Searching knowledge ({domain}) for: '{q}'")
+            self._log(state, f"Searching knowledge ({q_idx}/{total_q}, {domain}) for: '{q}'")
             results = search_knowledge(
                 query=q,
                 domain=domain,
@@ -113,6 +114,8 @@ Brainstorm {self.num_queries} specific, compelling search queries across news, l
                 client=self.client,
                 model=self.model,
             )
+            sample_hl = results[0].get("headline", "")[:70] if results else "None"
+            self._log(state, f"  -> Found {len(results)} snippet(s)" + (f" (top: '{sample_hl}')" if results else ""))
             all_snippets.extend(results)
 
         state.knowledge_context = KnowledgeContext(snippets=all_snippets)

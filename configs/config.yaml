@@ -6,6 +6,9 @@ llm:
   # DeepSeek-compatible base URL (OpenAI-compatible API)
   base_url: "https://api.deepseek.com"
   # api_key: set via DEEPSEEK_API_KEY environment variable
+  # Thinking depth for reasoning models ("none", "low", "high", "max")
+  # "low" cuts deepseek-reasoner thinking latency nearly in half while keeping CoT reasoning
+  reasoning_effort: "low"
 
 models:
   profiler: "deepseek-chat"               # Phase 1: Fast classification & video selection

@@ -21,7 +21,7 @@ Design note:
 
 from __future__ import annotations
 
-import uuid
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -31,7 +31,14 @@ from src.agents.knowledge_retriever_agent import KnowledgeRetrieverAgent, NewsRe
 from src.agents.profiler_agent import ProfilerAgent
 from src.agents.scriptwriter_agent import ScriptwriterAgent
 from src.agents.writers_room_agent import WritersRoomAgent
-from src.core.llm_client import get_client, reset_token_usage, get_token_usage, calculate_cost_usd
+from src.core.llm_client import (
+    get_client,
+    reset_token_usage,
+    get_token_usage,
+    calculate_cost_usd,
+    set_reasoning_effort,
+    get_reasoning_effort,
+)
 from src.core.state import SharedState, UserHistory
 
 
@@ -57,8 +64,13 @@ class Orchestrator:
         director_model: str | None = None,
         base_url: str | None = None,
         api_key: str | None = None,
+        reasoning_effort: str | None = "low",
         output_dir: str = "outputs",
     ) -> None:
+        self.reasoning_effort = reasoning_effort
+        if reasoning_effort is not None:
+            set_reasoning_effort(reasoning_effort)
+
         client = get_client(base_url=base_url, api_key=api_key)
 
         self.profiler = ProfilerAgent(model=profiler_model, client=client)
@@ -85,6 +97,7 @@ class Orchestrator:
             cfg = yaml.safe_load(f)
 
         models = cfg.get("models", {})
+        llm_cfg = cfg.get("llm", {})
         return cls(
             profiler_model=models.get("profiler", "deepseek-chat"),
             writers_room_model=models.get("writers_room", "deepseek-chat"),
@@ -92,8 +105,9 @@ class Orchestrator:
             retriever_model=models.get("knowledge_retriever") or models.get("retriever", "deepseek-chat"),
             image_model=models.get("art_director") or models.get("image_search", "deepseek-chat"),
             scriptwriter_model=models.get("scriptwriter", "deepseek-chat"),
-            base_url=cfg.get("llm", {}).get("base_url"),
-            api_key=cfg.get("llm", {}).get("api_key"),
+            base_url=llm_cfg.get("base_url"),
+            api_key=llm_cfg.get("api_key"),
+            reasoning_effort=llm_cfg.get("reasoning_effort", "low"),
             output_dir=cfg.get("output_dir", "outputs"),
         )
 
@@ -109,7 +123,10 @@ class Orchestrator:
             The fully populated SharedState (with storyboard).
         """
         uid = (user_id or "default_user").strip()
+        if self.reasoning_effort is not None:
+            set_reasoning_effort(self.reasoning_effort)
         reset_token_usage()
+        t_pipeline_start = time.time()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_id = f"agentic_{uid}_{timestamp}"
 
@@ -119,41 +136,48 @@ class Orchestrator:
             user_history=UserHistory(videos=videos),
             run_id=run_id,
         )
-        state.log(f"Pipeline started. user={uid}, run_id={run_id}. Videos in history: {len(videos)}.")
+        eff = get_reasoning_effort() or "default"
+        state.log(
+            f"Pipeline started. user={uid}, run_id={run_id}. "
+            f"Videos in history: {len(videos)}. reasoning_effort={eff}."
+        )
 
-        # Phase 1: User Profiling (Two-Round with Spoken Transcripts)
-        state.log("--- Phase 1: User Profiling (ProfilerAgent) ---")
-        state = self.profiler.run(state)
+        phases = [
+            ("User Profiling (ProfilerAgent)", self.profiler.model, self.profiler.run),
+            ("Writers' Room Ideation (WritersRoomAgent)", self.writers_room.model, self.writers_room.run),
+            ("Pitch Deliberation & Selection (DirectorAgent)", self.director.model, self.director.run),
+            ("Targeted Knowledge & Fact Retrieval (KnowledgeRetrieverAgent)", self.knowledge_retriever.model, self.knowledge_retriever.run),
+            ("Storyboard Drafting (ScriptwriterAgent - Draft Pass)", self.scriptwriter.model, self.scriptwriter.draft),
+            ("Visual Grounding & Asset Curation (ArtDirectorAgent)", self.art_director.model, self.art_director.run),
+            ("Storyboard Grounding & Refinement (ScriptwriterAgent - Refine Pass)", self.scriptwriter.model, self.scriptwriter.refine),
+        ]
 
-        # Phase 2: Writers' Room Candidate Pitches
-        state.log("--- Phase 2: Writers' Room Ideation (WritersRoomAgent) ---")
-        state = self.writers_room.run(state)
+        total_phases = len(phases)
+        for idx, (label, model_name, step_fn) in enumerate(phases, 1):
+            print(f"\n--- [Phase {idx}/{total_phases}] {label} [{model_name}] ---", flush=True)
+            state.log(f"--- Phase {idx}: {label} ---")
+            t_phase = time.time()
+            state = step_fn(state)
+            print(f"--- ✓ Phase {idx}/{total_phases} done in {time.time() - t_phase:.1f}s ---", flush=True)
 
-        # Phase 3: Director Deliberation & Selection
-        state.log("--- Phase 3: Pitch Deliberation & Selection (DirectorAgent) ---")
-        state = self.director.run(state)
-
-        # Phase 4: Targeted Fact & Knowledge Retrieval (on Winning Pitch)
-        state.log("--- Phase 4: Targeted Knowledge & Fact Retrieval (KnowledgeRetrieverAgent) ---")
-        state = self.knowledge_retriever.run(state)
-
-        # Phase 5: Initial Storyboard Draft (Following Director Notes & Knowledge)
-        state.log("--- Phase 5: Storyboard Drafting (ScriptwriterAgent - Draft Pass) ---")
-        state = self.scriptwriter.draft(state)
-
-        # Phase 6: Visual Search & Asset Grounding
-        state.log("--- Phase 6: Visual Grounding & Asset Curation (ArtDirectorAgent) ---")
-        state = self.art_director.run(state)
-
-        state.log("--- Phase 7: Storyboard Grounding & Refinement (ScriptwriterAgent - Refine Pass) ---")
-        state = self.scriptwriter.refine(state)
+        total_elapsed = time.time() - t_pipeline_start
 
         # Audit token accounting
         usage = get_token_usage()
-        cost = calculate_cost_usd(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+        cost = calculate_cost_usd(
+            usage.get("prompt_tokens", 0),
+            usage.get("completion_tokens", 0),
+            model=self.scriptwriter.model if usage.get("reasoning_tokens", 0) > 0 else None,
+        )
         state.token_usage = usage
         state.estimated_cost_usd = cost
-        state.log(f"Token audit: {usage.get('prompt_tokens', 0):,} prompt + {usage.get('completion_tokens', 0):,} completion across {usage.get('total_calls', 0)} calls. Est. Cost: ${cost:.5f} USD.")
+        r_tok = usage.get("reasoning_tokens", 0)
+        r_str = f" (incl. {r_tok:,} reasoning)" if r_tok else ""
+        state.log(
+            f"Token audit: {usage.get('prompt_tokens', 0):,} prompt + "
+            f"{usage.get('completion_tokens', 0):,} completion{r_str} across "
+            f"{usage.get('total_calls', 0)} calls in {total_elapsed:.1f}s. Est. Cost: ${cost:.5f} USD."
+        )
         state.log("Pipeline complete.")
 
         # Save output in outputs/<user>/agentic/agentic_storyboard_<user>_<datetime>.json

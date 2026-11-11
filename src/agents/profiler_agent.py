@@ -84,13 +84,15 @@ Analyze this user's overall tastes and select up to {self.max_investigate} speci
             investigate_targets = [{"vid_id": f"vid{i+1}", "reason": "Representative video"} for i in range(min(3, len(videos)))]
 
         self._log(state, f"Round 1 completed. Selected {len(investigate_targets)} videos for deep transcript inspection.")
+        if r1_data.get("preliminary_themes"):
+            self._log(state, f"  Preliminary themes: {', '.join(str(t) for t in r1_data.get('preliminary_themes', [])[:5])}")
 
         # -------------------------------------------------------------------
         # TOOL EXECUTION: Fetch Spoken Transcripts & Metadata
         # -------------------------------------------------------------------
         transcript_evidence: list[dict[str, Any]] = []
 
-        for target in investigate_targets[:self.max_investigate]:
+        for idx_t, target in enumerate(investigate_targets[:self.max_investigate], 1):
             vid_id = target.get("vid_id", "")
             reason = target.get("reason", "")
             video_info = vid_map.get(vid_id)
@@ -99,10 +101,13 @@ Analyze this user's overall tastes and select up to {self.max_investigate} speci
 
             url = video_info.get("url", "")
             title = video_info.get("title", "")
-            self._log(state, f"Investigating [{vid_id}] '{title[:35]}...' -> Reason: {reason}")
+            self._log(state, f"Investigating ({idx_t}/{len(investigate_targets[:self.max_investigate])}) [{vid_id}] '{title[:40]}...' -> Reason: {reason}")
 
             transcript = get_video_transcript(url, max_chars=1200)
             meta = get_video_metadata(url)
+            channel = meta.get("author", "") or "Unknown"
+            tr_status = f"✓ Transcript ({len(transcript)} chars)" if transcript else "✗ No subtitles"
+            self._log(state, f"  -> {tr_status} | Creator: {channel}")
 
             transcript_evidence.append({
                 "vid_id": vid_id,
@@ -163,6 +168,10 @@ Synthesize a deeply fine-grained, nuanced UserProfile using the spoken words and
             f"Round 2 complete. Fine-grained profile established ({len(state.user_profile.interests)} niche interests, "
             f"{len(state.user_profile.investigated_insights)} transcript insights).",
         )
+        self._log(state, f"  Preferred style: {state.user_profile.preferred_style}")
+        self._log(state, f"  Top interests:   {', '.join(state.user_profile.interests[:6])}")
+        if state.user_profile.raw_summary:
+            self._log(state, f"  Summary:         {state.user_profile.raw_summary[:140]}...")
         return state
 
 
