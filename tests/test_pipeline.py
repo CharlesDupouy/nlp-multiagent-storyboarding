@@ -715,6 +715,134 @@ class TestPipeline(unittest.TestCase):
         ph_frame = s2v.render_scene_frame(None, scene, (1280, 720), lang="en")
         self.assertEqual(ph_frame.size, (1280, 720))
 
+    def test_config_baseline_reasoner_and_pipeline_wiring(self):
+        import yaml
+        from src.orchestrator import Orchestrator
+        from baseline.single_agent_baseline import SingleAgentBaseline
+
+        repo_root = Path(__file__).resolve().parent.parent
+        cfg_path = repo_root / "configs" / "config.yaml"
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        self.assertEqual(cfg["baseline"]["model"], "deepseek-reasoner")
+        self.assertEqual(cfg["llm"]["reasoning_effort"], "low")
+
+        orch = Orchestrator.from_config(str(cfg_path))
+        base = SingleAgentBaseline.from_config(str(cfg_path))
+        self.assertEqual(orch.scriptwriter.target_duration, 60)
+        self.assertEqual(orch.knowledge_retriever.max_results, 5)
+        self.assertEqual(base.model, "deepseek-reasoner")
+        self.assertEqual(base.target_duration, 60)
+
+        custom_cfg = {
+            "llm": {"base_url": "https://api.deepseek.com", "reasoning_effort": "low"},
+            "models": {"profiler": "deepseek-chat", "scriptwriter": "deepseek-reasoner"},
+            "baseline": {"model": "deepseek-reasoner"},
+            "pipeline": {"target_duration_seconds": 45, "max_news_results": 2},
+            "output_dir": "outputs",
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            custom_path = Path(tmp_dir) / "custom.yaml"
+            custom_path.write_text(yaml.safe_dump(custom_cfg), encoding="utf-8")
+            custom_orch = Orchestrator.from_config(str(custom_path))
+            custom_base = SingleAgentBaseline.from_config(str(custom_path))
+            self.assertEqual(custom_orch.scriptwriter.target_duration, 45)
+            self.assertEqual(custom_orch.knowledge_retriever.max_results, 2)
+            self.assertEqual(custom_base.target_duration, 45)
+
+    def test_prompts_subtitle_free_english_image_queries_and_agent_loaders(self):
+        from baseline.single_agent_baseline import _BASELINE_SYSTEM_PROMPT
+        from src.agents.scriptwriter_agent import _DRAFT_SYSTEM_PROMPT, _REFINE_SYSTEM_PROMPT
+        from src.agents.profiler_agent import _ROUND1_MACRO_SYSTEM_PROMPT, _ROUND2_SYNTHESIS_SYSTEM_PROMPT
+        from src.agents.knowledge_retriever_agent import _NEWS_BRAINSTORM_SYSTEM_PROMPT
+        from src.agents.art_director_agent import _IMAGE_QUERY_SYSTEM_PROMPT, _ART_DIRECTOR_SYSTEM_PROMPT
+
+        repo_root = Path(__file__).resolve().parent.parent
+
+        # Subtitle schema field removed & voiceover pacing tightened
+        for prompt_text in (_BASELINE_SYSTEM_PROMPT, _DRAFT_SYSTEM_PROMPT, _REFINE_SYSTEM_PROMPT):
+            self.assertNotIn('"subtitle":', prompt_text)
+            self.assertIn("15 to 25", prompt_text)
+
+        # English-only stock photo search rule enforced
+        self.assertIn("ENGLISH", _IMAGE_QUERY_SYSTEM_PROMPT)
+        self.assertIn("ENGLISH", _BASELINE_SYSTEM_PROMPT)
+
+        # All agents load from prompts/*.txt cleanly
+        self.assertEqual(_ROUND1_MACRO_SYSTEM_PROMPT, (repo_root / "prompts" / "profiler_r1_macro.txt").read_text(encoding="utf-8").strip())
+        self.assertEqual(_ROUND2_SYNTHESIS_SYSTEM_PROMPT, (repo_root / "prompts" / "profiler_r2_synthesis.txt").read_text(encoding="utf-8").strip())
+        self.assertEqual(_NEWS_BRAINSTORM_SYSTEM_PROMPT, (repo_root / "prompts" / "news_brainstorm.txt").read_text(encoding="utf-8").strip())
+        self.assertEqual(_IMAGE_QUERY_SYSTEM_PROMPT, (repo_root / "prompts" / "image_query.txt").read_text(encoding="utf-8").strip())
+        self.assertEqual(_ART_DIRECTOR_SYSTEM_PROMPT, (repo_root / "prompts" / "art_director_selection.txt").read_text(encoding="utf-8").strip())
+
+    def test_per_model_mixed_cost_accounting(self):
+        from unittest.mock import MagicMock
+        from src.core.llm_client import (
+            chat_completion,
+            reset_token_usage,
+            get_token_usage,
+            get_token_usage_by_model,
+            get_session_cost_usd,
+        )
+
+        reset_token_usage()
+        mock_client = MagicMock()
+        resp_chat = MagicMock()
+        resp_chat.choices = [MagicMock()]
+        resp_chat.choices[0].message.content = "ok"
+        resp_chat.usage.prompt_tokens = 1_000_000
+        resp_chat.usage.completion_tokens = 1_000_000
+        resp_chat.usage.completion_tokens_details.reasoning_tokens = 0
+
+        resp_reason = MagicMock()
+        resp_reason.choices = [MagicMock()]
+        resp_reason.choices[0].message.content = "ok"
+        resp_reason.usage.prompt_tokens = 1_000_000
+        resp_reason.usage.completion_tokens = 1_000_000
+        resp_reason.usage.completion_tokens_details.reasoning_tokens = 200_000
+
+        mock_client.chat.completions.create.side_effect = [resp_chat, resp_reason]
+        chat_completion(mock_client, "deepseek-chat", "sys", "usr")
+        chat_completion(mock_client, "deepseek-reasoner", "sys", "usr")
+
+        totals = get_token_usage()
+        self.assertEqual(totals["prompt_tokens"], 2_000_000)
+        self.assertEqual(totals["completion_tokens"], 2_000_000)
+        by_model = get_token_usage_by_model()
+        self.assertIn("deepseek-chat", by_model)
+        self.assertIn("deepseek-reasoner", by_model)
+        # Expected: (0.14 + 0.28) + (0.55 + 2.19) = 3.16 USD (not 5.48 USD)
+        self.assertAlmostEqual(get_session_cost_usd(provider="deepseek"), 3.16, places=4)
+        reset_token_usage()
+
+    def test_clean_voiceover_midstring_speaker_cues_and_subtitle_free_views(self):
+        import storyboard_to_video as s2v
+        from evaluation.llm_judge import render_storyboard
+        from src.core.state import clean_voiceover, SharedState, Storyboard
+
+        self.assertEqual(s2v.DEFAULT_PADDING, 0.3)
+
+        raw = 'The door bursts open. CLINICIAN 1 (calling down the hall): "Get the crash cart!"'
+        cleaned = clean_voiceover(raw)
+        self.assertNotIn("CLINICIAN", cleaned)
+        self.assertNotIn("calling down the hall", cleaned)
+        self.assertEqual(cleaned, "The door bursts open. Get the crash cart!")
+        self.assertEqual(s2v.clean_audio_cue(raw), cleaned)
+
+        self.assertEqual(clean_voiceover("CLINICIAN 1: Check her vitals."), "Check her vitals.")
+        self.assertEqual(clean_voiceover('VO: Hello. MAN IN SUIT (whispering): "Run!"'), "Hello. Run!")
+
+        # Subtitle-free scenes omit Subtitle lines from Markdown and blind judge view
+        st = SharedState(
+            storyboard=Storyboard(
+                title="Clean Video",
+                scenes=[{"scene_id": 1, "description": "Wooden desk", "voiceover": "Spoken line.", "duration_seconds": 10}],
+            )
+        )
+        md = st.to_markdown()
+        self.assertNotIn("Subtitle", md)
+        judged_view = render_storyboard({"storyboard": {"title": "Clean Video", "overall_narrative": "Arc", "scenes": st.storyboard.scenes}})
+        self.assertNotIn("Subtitle:", judged_view)
+
 
 if __name__ == "__main__":
     unittest.main()

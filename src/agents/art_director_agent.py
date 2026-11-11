@@ -25,7 +25,7 @@ from typing import Any
 from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
-from src.core.llm_client import chat_completion, extract_json
+from src.core.llm_client import chat_completion, extract_json, load_prompt
 from src.core.state import ImageContext, SharedState
 from src.tools.image_tool import search_image_candidates
 
@@ -53,7 +53,7 @@ class ArtDirectorAgent(BaseAgent):
         # 1. Query Formulation Pass: Concrete physical nouns only
         # -------------------------------------------------------------------
         scene_descriptions = "\n".join(
-            f"Scene {s.get('scene_id', idx + 1)}: {s.get('description', '')} (Subtitle: '{s.get('subtitle', '')}')"
+            f"Scene {s.get('scene_id', idx + 1)}: {s.get('description', '')}"
             for idx, s in enumerate(scenes)
         )
 
@@ -219,17 +219,18 @@ def _parse_art_director_selections(raw: str) -> dict[int, str]:
     return selections
 
 
-_IMAGE_QUERY_SYSTEM_PROMPT = """\
+_IMAGE_QUERY_SYSTEM_PROMPT_DEFAULT = """\
 You are an expert Art Director formulating stock photo search queries for an external image database (Unsplash).
 
 CRITICAL SEARCH ENGINE PRINCIPLES:
-1. Search engines match TANGIBLE PHYSICAL OBJECTS and REAL-WORLD SETTINGS (e.g., "multicolor ballpoint pen", "students in classroom", "vintage rotary phone", "newspaper on wooden table").
-2. STRICTLY FORBIDDEN: NEVER include video production directions or shot modifiers in the query.
+1. LANGUAGE RULE (MANDATORY): ALWAYS write both "primary_query" and "fallback_query" in ENGLISH (concrete physical English nouns/adjectives), EVEN IF the storyboard scenes, title, or voiceover are written in French or another language. Stock photo engines (Unsplash) perform best on simple English keywords and fail on non-English phrases.
+2. Search engines match TANGIBLE PHYSICAL OBJECTS and REAL-WORLD SETTINGS (e.g., "multicolor ballpoint pen", "students in classroom", "vintage rotary phone", "newspaper on wooden table").
+3. STRICTLY FORBIDDEN: NEVER include video production directions or shot modifiers in the query.
    - Do NOT include: "split screen", "exploded view", "macro", "closeup", "cinematic", "drone shot", "pov", "2000s", "vintage style".
    - Do NOT include brand names (e.g. use "ballpoint pen", not "Bic").
-3. Each scene MUST have:
-   - "primary_query": 2 to 4 tangible visual nouns/adjectives describing the single main physical object or setting.
-   - "fallback_query": 1 to 2 word core physical noun (e.g. "ballpoint pen", "classroom", "telephone").
+4. Each scene MUST have:
+   - "primary_query": 2 to 4 tangible visual nouns/adjectives IN ENGLISH describing the single main physical object or setting.
+   - "fallback_query": 1 to 2 word core physical noun IN ENGLISH (e.g. "ballpoint pen", "classroom", "telephone").
 
 Return ONLY valid JSON in this format:
 {
@@ -248,8 +249,10 @@ Return ONLY valid JSON in this format:
 }
 """
 
+_IMAGE_QUERY_SYSTEM_PROMPT = load_prompt("image_query.txt", _IMAGE_QUERY_SYSTEM_PROMPT_DEFAULT)
 
-_ART_DIRECTOR_SYSTEM_PROMPT = """\
+
+_ART_DIRECTOR_SYSTEM_PROMPT_DEFAULT = """\
 You are an Art Director reviewing photographic image candidates for short-video scenes.
 For each scene, evaluate the candidate descriptions and select the SINGLE candidate that is most visually faithful and representative of what the scene describes.
 
@@ -268,3 +271,5 @@ Return ONLY valid JSON in this format:
   ]
 }
 """
+
+_ART_DIRECTOR_SYSTEM_PROMPT = load_prompt("art_director_selection.txt", _ART_DIRECTOR_SYSTEM_PROMPT_DEFAULT)

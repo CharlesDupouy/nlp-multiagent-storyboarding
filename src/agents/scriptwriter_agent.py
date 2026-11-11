@@ -4,11 +4,11 @@ ScriptwriterAgent — Multi-pass creative scriptwriting agent.
 Responsibilities:
   1. Draft Pass:
      - Consumes UserProfile and NewsContext.
-     - Generates initial narrative arc and scene structure (descriptions, subtitles, audio cues).
+     - Generates initial narrative arc and scene structure (visual descriptions, pure voiceover).
   2. Refinement Pass:
      - Runs AFTER ImageSearchAgent.
      - Reviews draft scenes against retrieved visual assets (referenced symbolically as img1, img2...).
-     - Assigns 'image_ref' to scenes and refines scene descriptions/subtitles to ground them in the visuals.
+     - Assigns 'image_ref' to scenes and refines scene descriptions and voiceover to ground them in the visuals.
      - Never touches or hallucinates raw URLs. The orchestrator programmatically maps
        'image_ref' -> 'image_url'.
 
@@ -19,12 +19,11 @@ Output written to state:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
-from src.core.llm_client import chat_completion, extract_json
+from src.core.llm_client import chat_completion, extract_json, load_prompt
 from src.core.state import SharedState, Storyboard
 
 
@@ -110,9 +109,9 @@ class ScriptwriterAgent(BaseAgent):
         for s in state.storyboard.scenes:
             sid = s.get("scene_id", "?")
             dur = s.get("duration_seconds", "?")
-            sub = str(s.get("subtitle", ""))[:60]
+            preview = str(s.get("voiceover") or s.get("audio_cue") or s.get("description") or "")[:60]
             img_tag = f" | img={s.get('image_ref') or 'none'}" if include_images else ""
-            self._log(state, f"  Scene {sid} ({dur}s{img_tag}): \"{sub}\"")
+            self._log(state, f"  Scene {sid} ({dur}s{img_tag}): \"{preview}\"")
 
     def run(self, state: SharedState) -> SharedState:
         """
@@ -211,8 +210,8 @@ TASK
 ====
 Refine the storyboard scenes to visually ground them with the available assets:
 1. For each scene, assign the best fitting asset ID (e.g. "image_ref": "img1") or null if none fits.
-2. Slightly tweak the visual description and subtitle if needed to match what is depicted in the chosen image asset.
-3. Keep scene pacing and target duration consistent.
+2. Slightly tweak the visual description and voiceover if needed to match what is depicted in the chosen image asset.
+3. Keep scene pacing (~15-25 spoken words per scene, ~120-145 words total for 60s) and target duration consistent.
 """
 
 
@@ -226,16 +225,6 @@ def _parse_storyboard_response(raw: str) -> dict:
         return {"overall_narrative": raw, "scenes": [], "title": "Parse Error"}
 
 
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
-
-
-def _load_prompt(filename: str, default: str) -> str:
-    path = _PROMPTS_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8").strip()
-    return default.strip()
-
-
 _DRAFT_SYSTEM_PROMPT_DEFAULT = """\
 You are a premier short-form video screenwriter and visual storyteller.
 Your superpower is turning creative concepts and real-world facts into gripping, fast-paced 60-second video storyboards.
@@ -246,8 +235,7 @@ Core Philosophy:
 - Ground the script using the retrieved real-world facts and evidence—never rely on hollow generic fluff.
 - Deliver an instant 3-second hook that halts the scroll.
 - Ensure narrative progression: each scene must reveal new information, escalate stakes, or provide visual contrast.
-- Subtitles: Punchy, memorable on-screen text (max 12 words per cut, formatted for mobile).
-- Voiceover: Pure spoken narrative dialogue or voiceover lines only. NO sound effects (SFX) and NO music cues.
+- Voiceover & Pacing: Pure spoken narrative dialogue or voiceover lines only (NO SFX, NO music cues, NO stage labels). Keep speech concise so Text-To-Speech fits within the target duration: aim for ~15 to 25 spoken words per scene (~120 to 145 spoken words total across a 60s video; roughly 2 to 2.5 words per second of scene duration). Do NOT include an on-screen "subtitle" field.
 - Language: Write the script in the primary language of the user's profile/history.
 
 CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO SFX, NO PLACEHOLDERS):
@@ -269,8 +257,7 @@ Return ONLY valid JSON with this structure:
     {
       "scene_id": 1,
       "description": "Visual scene description: authentic action, dynamic camera movement, distinct visual elements",
-      "subtitle": "Punchy on-screen caption (max 12 words)",
-      "voiceover": "Pure spoken words to be read aloud by voiceover (NO 'VO:', NO SFX, NO music cues)",
+      "voiceover": "Pure spoken words to be read aloud by voiceover (~15-25 words, NO 'VO:', NO SFX, NO music cues)",
       "duration_seconds": 10
     }
   ]
@@ -279,7 +266,7 @@ Return ONLY valid JSON with this structure:
 Total scenes: 4 to 6 scenes summing strictly to the target duration.
 """
 
-_DRAFT_SYSTEM_PROMPT = _load_prompt("scriptwriter_draft.txt", _DRAFT_SYSTEM_PROMPT_DEFAULT)
+_DRAFT_SYSTEM_PROMPT = load_prompt("scriptwriter_draft.txt", _DRAFT_SYSTEM_PROMPT_DEFAULT)
 
 
 _REFINE_SYSTEM_PROMPT_DEFAULT = """\
@@ -287,7 +274,7 @@ You are an expert video director and storyteller refining an entertaining short 
 
 Refine the scenes to anchor your entertaining narrative in the real visual evidence:
 1. Ground the story into the real-world objects, places, or people shown in the image assets.
-2. Maintain high entertainment value: witty, fast-paced, and captivating.
+2. Maintain high entertainment value: witty, fast-paced, and captivating, while keeping spoken voiceover crisp (~15 to 25 words per scene, ~120 to 145 spoken words total for 60s) so Text-To-Speech fits the target duration. Do NOT include a "subtitle" field.
 3. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
 4. Language: Keep the same language as the draft.
 
@@ -310,8 +297,7 @@ Return ONLY valid JSON with this structure:
     {
       "scene_id": 1,
       "description": "Visual scene description aligned with the real-world image asset",
-      "subtitle": "Punchy on-screen caption",
-      "voiceover": "Pure spoken words to be read aloud by voiceover (NO 'VO:', NO SFX, NO music cues)",
+      "voiceover": "Pure spoken words to be read aloud by voiceover (~15-25 words, NO 'VO:', NO SFX, NO music cues)",
       "image_ref": "img1",
       "duration_seconds": 10
     }
@@ -319,4 +305,4 @@ Return ONLY valid JSON with this structure:
 }
 """
 
-_REFINE_SYSTEM_PROMPT = _load_prompt("scriptwriter_refine.txt", _REFINE_SYSTEM_PROMPT_DEFAULT)
+_REFINE_SYSTEM_PROMPT = load_prompt("scriptwriter_refine.txt", _REFINE_SYSTEM_PROMPT_DEFAULT)

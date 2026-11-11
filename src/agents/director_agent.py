@@ -17,12 +17,11 @@ Output written to state:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
-from src.core.llm_client import chat_completion, extract_json
+from src.core.llm_client import chat_completion, extract_json, load_prompt
 from src.core.state import SharedState
 
 
@@ -113,16 +112,6 @@ def _parse_decision(raw: str) -> dict:
         return {"winning_pitch_id": "pitch1", "critiques": [], "director_notes": "Focus on high energy and clean pacing."}
 
 
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
-
-
-def _load_prompt(filename: str, default: str) -> str:
-    path = _PROMPTS_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8").strip()
-    return default.strip()
-
-
 _DIRECTOR_SYSTEM_PROMPT_DEFAULT = """\
 You are an award-winning Executive Creative Director for short-form video (YouTube Shorts, Reels).
 Your job is to make tough editorial decisions: review 3 pitches, critique them, pick the winning pitch, and give clear production instructions.
@@ -157,4 +146,4 @@ Return ONLY valid JSON with this structure:
 }
 """
 
-_DIRECTOR_SYSTEM_PROMPT = _load_prompt("director.txt", _DIRECTOR_SYSTEM_PROMPT_DEFAULT)
+_DIRECTOR_SYSTEM_PROMPT = load_prompt("director.txt", _DIRECTOR_SYSTEM_PROMPT_DEFAULT)

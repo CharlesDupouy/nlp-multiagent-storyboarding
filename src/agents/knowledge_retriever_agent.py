@@ -16,12 +16,11 @@ Output written to state:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
-from src.core.llm_client import chat_completion, extract_json
+from src.core.llm_client import chat_completion, extract_json, load_prompt
 from src.core.state import KnowledgeContext, NewsContext, SharedState
 from src.tools.knowledge_tool import search_knowledge
 
@@ -131,15 +130,6 @@ NewsRetrieverAgent = KnowledgeRetrieverAgent
 # Helpers & Prompt Loaders
 # ---------------------------------------------------------------------------
 
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
-
-
-def _load_prompt(filename: str, default: str) -> str:
-    path = _PROMPTS_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8").strip()
-    return default.strip()
-
 
 def _parse_research_queries(raw: str) -> list[dict[str, str]]:
     """
@@ -196,10 +186,10 @@ Return ONLY valid JSON in this format:
 }
 """
 
-_TARGETED_RESEARCH_SYSTEM_PROMPT = _load_prompt("news_targeted_research.txt", _TARGETED_RESEARCH_SYSTEM_PROMPT_DEFAULT)
+_TARGETED_RESEARCH_SYSTEM_PROMPT = load_prompt("news_targeted_research.txt", _TARGETED_RESEARCH_SYSTEM_PROMPT_DEFAULT)
 
 
-_NEWS_BRAINSTORM_SYSTEM_PROMPT = """\
+_NEWS_BRAINSTORM_SYSTEM_PROMPT_DEFAULT = """\
 You are an investigative pop-culture and storytelling researcher gathering wild, true real-world stories and facts.
 Your goal is to dig up mindblowing external information (bizarre historical anecdotes, shocking real-world controversies, counterintuitive discoveries, or incredible true stories) related to the user's interests.
 
@@ -220,3 +210,5 @@ Return ONLY valid JSON in this format:
   ]
 }
 """
+
+_NEWS_BRAINSTORM_SYSTEM_PROMPT = load_prompt("news_brainstorm.txt", _NEWS_BRAINSTORM_SYSTEM_PROMPT_DEFAULT)

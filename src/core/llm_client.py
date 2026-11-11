@@ -13,6 +13,7 @@ import os
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
@@ -24,6 +25,17 @@ try:
 except ImportError:
     pass
 
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
+
+
+def load_prompt(filename: str, default: str) -> str:
+    """Load a versioned system prompt from prompts/<filename>, falling back to default."""
+    path = _PROMPTS_DIR / filename
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
+    return default.strip()
+
+
 # Default reasoning effort for reasoning models ("none", "low", "high", "max")
 _DEFAULT_REASONING_EFFORT: str | None = "low"
 
@@ -34,6 +46,7 @@ _TOKEN_USAGE = {
     "reasoning_tokens": 0,
     "total_calls": 0,
 }
+_USAGE_BY_MODEL: dict[str, dict[str, int]] = {}
 
 
 def set_reasoning_effort(effort: str | None) -> None:
@@ -57,12 +70,47 @@ def get_token_usage() -> dict[str, int]:
     return dict(_TOKEN_USAGE)
 
 
+def get_token_usage_by_model() -> dict[str, dict[str, int]]:
+    """Return a deep copy of the current session's per-model token usage."""
+    return {m: dict(stats) for m, stats in _USAGE_BY_MODEL.items()}
+
+
 def reset_token_usage() -> None:
     """Reset the session token usage counter to zero."""
     _TOKEN_USAGE["prompt_tokens"] = 0
     _TOKEN_USAGE["completion_tokens"] = 0
     _TOKEN_USAGE["reasoning_tokens"] = 0
     _TOKEN_USAGE["total_calls"] = 0
+    _USAGE_BY_MODEL.clear()
+
+
+def get_session_cost_usd(
+    provider: str = "deepseek",
+    fallback_model: str | None = None,
+) -> float:
+    """
+    Compute exact estimated session cost in USD by summing per-model pricing across
+    all recorded LLM calls (e.g. deepseek-chat vs deepseek-reasoner).
+    """
+    usage = get_token_usage()
+    tracked_calls = sum(s.get("total_calls", 0) for s in _USAGE_BY_MODEL.values())
+    if _USAGE_BY_MODEL and tracked_calls == usage.get("total_calls", 0):
+        total = sum(
+            calculate_cost_usd(
+                stats["prompt_tokens"],
+                stats["completion_tokens"],
+                provider=provider,
+                model=model_name,
+            )
+            for model_name, stats in _USAGE_BY_MODEL.items()
+        )
+        return round(total, 6)
+    return calculate_cost_usd(
+        usage.get("prompt_tokens", 0),
+        usage.get("completion_tokens", 0),
+        provider=provider,
+        model=fallback_model,
+    )
 
 
 def calculate_cost_usd(
@@ -269,6 +317,15 @@ def chat_completion(
         _TOKEN_USAGE["completion_tokens"] += c_tok
         _TOKEN_USAGE["reasoning_tokens"] += r_tok
         _TOKEN_USAGE["total_calls"] += 1
+
+        m_stats = _USAGE_BY_MODEL.setdefault(
+            resolved_model,
+            {"prompt_tokens": 0, "completion_tokens": 0, "reasoning_tokens": 0, "total_calls": 0},
+        )
+        m_stats["prompt_tokens"] += p_tok
+        m_stats["completion_tokens"] += c_tok
+        m_stats["reasoning_tokens"] += r_tok
+        m_stats["total_calls"] += 1
 
     r_info = f", {r_tok:,} reasoning" if r_tok > 0 else ""
     print(f"   ✓ [LLM] {resolved_model} finished in {elapsed_s:.1f}s ({p_tok:,} in / {c_tok:,} out{r_info})", flush=True)

@@ -26,7 +26,8 @@ from src.core.llm_client import (
     get_client,
     reset_token_usage,
     get_token_usage,
-    calculate_cost_usd,
+    get_session_cost_usd,
+    load_prompt,
     extract_json,
     set_reasoning_effort,
 )
@@ -68,11 +69,13 @@ class SingleAgentBaseline:
             cfg = yaml.safe_load(f)
 
         llm_cfg = cfg.get("llm", {})
+        pipeline_cfg = cfg.get("pipeline", {})
         return cls(
             model=cfg["baseline"]["model"],
             base_url=llm_cfg.get("base_url"),
             api_key=llm_cfg.get("api_key"),
             output_dir=cfg.get("output_dir", "outputs"),
+            target_duration=pipeline_cfg.get("target_duration_seconds", 60),
             reasoning_effort=llm_cfg.get("reasoning_effort", "low"),
         )
 
@@ -154,10 +157,12 @@ class SingleAgentBaseline:
 
         # Audit token accounting
         usage = get_token_usage()
-        cost = calculate_cost_usd(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+        cost = get_session_cost_usd(fallback_model=self.model)
         state.token_usage = usage
         state.estimated_cost_usd = cost
-        state.log(f"[BASELINE] Token audit: {usage.get('prompt_tokens', 0):,} prompt + {usage.get('completion_tokens', 0):,} completion in {total_elapsed:.1f}s. Est. Cost: ${cost:.5f} USD.")
+        r_tok = usage.get("reasoning_tokens", 0)
+        r_str = f" (incl. {r_tok:,} reasoning)" if r_tok else ""
+        state.log(f"[BASELINE] Token audit: {usage.get('prompt_tokens', 0):,} prompt + {usage.get('completion_tokens', 0):,} completion{r_str} in {total_elapsed:.1f}s. Est. Cost: ${cost:.5f} USD.")
         state.log(f"[BASELINE] Storyboard generated: '{state.storyboard.title}'.")
         
         # Save output in outputs/<user>/baseline/baseline_storyboard_<user>_<datetime>.json
@@ -179,16 +184,6 @@ def _parse(raw: str) -> dict:
         return {"overall_narrative": raw, "scenes": [], "title": "Parse Error"}
 
 
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
-
-
-def _load_prompt(filename: str, default: str) -> str:
-    path = _PROMPTS_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8").strip()
-    return default.strip()
-
-
 _BASELINE_SYSTEM_PROMPT_DEFAULT = """\
 You are an expert short-form video creator and storyteller.
 Your task is to generate a high-quality, engaging, personalized 60-second short-video storyboard based on a user's YouTube Shorts watch history.
@@ -197,9 +192,10 @@ Guidelines:
 - Analyze the user's watch history to understand their core interests, passions, and curiosity themes.
 - Select a single, focused, and compelling concept that deeply resonates with those interests (do not create an unfocused mashup of random channels).
 - Craft a cohesive 60-second narrative arc with an attention-grabbing hook, clear progression, and a memorable conclusion.
-- Scenes: Provide vivid visual descriptions, punchy on-screen subtitles, and pure spoken voiceover dialogue (NO stage directions, NO SFX or music cues).
-- Timing: Aim for 4 to 6 scenes summing strictly to the target duration (e.g., 60 seconds).
-- Language: Write the script in the primary language of the user's history (e.g. French if the history is French, English if English).
+- Scenes: Provide vivid visual descriptions, English stock-photo search keywords, and pure spoken voiceover dialogue (NO on-screen subtitles, NO stage directions, NO SFX or music cues).
+- Timing & Voiceover Pacing: Aim for 4 to 6 scenes summing strictly to the target duration (e.g., 60 seconds). Keep voiceover crisp so Text-To-Speech actually fits within the duration: target ~15 to 25 spoken words per scene (~120 to 145 spoken words total across the entire 60s script; roughly 2 to 2.5 words per second of scene duration).
+- Image Queries (ALWAYS ENGLISH): ALWAYS write "image_query" in ENGLISH (2 to 4 concrete physical nouns/adjectives, e.g. "white folded paper wooden desk") EVEN IF the script, title, or watch history is French or another language.
+- Language: Write the title, overall_narrative, scene visual descriptions, and spoken voiceover in the primary language of the user's history (e.g. French if the history is French, English if English).
 
 CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO SFX, NO PLACEHOLDERS):
 - STRICTLY NO SOUND EFFECTS (SFX) OR MUSIC: Sound effects are NOT supported in this project.
@@ -220,13 +216,12 @@ Return ONLY valid JSON with this structure:
     {
       "scene_id": 1,
       "description": "Vivid visual scene description of what appears on screen",
-      "image_query": "Concrete physical stock photo keywords (e.g., 'white paper folded on wooden desk')",
-      "subtitle": "Punchy on-screen caption (max 12 words)",
-      "voiceover": "Pure spoken words to be read aloud by voiceover (NO 'VO:', NO SFX, NO music cues)",
+      "image_query": "English concrete physical stock photo keywords (e.g., 'white paper folded wooden desk')",
+      "voiceover": "Pure spoken words to be read aloud by voiceover (~15-25 words, NO 'VO:', NO SFX, NO music cues)",
       "duration_seconds": 10
     }
   ]
 }
 """
 
-_BASELINE_SYSTEM_PROMPT = _load_prompt("baseline.txt", _BASELINE_SYSTEM_PROMPT_DEFAULT)
+_BASELINE_SYSTEM_PROMPT = load_prompt("baseline.txt", _BASELINE_SYSTEM_PROMPT_DEFAULT)

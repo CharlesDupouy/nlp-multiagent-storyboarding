@@ -43,6 +43,18 @@ def clean_voiceover(text: str) -> str:
     voice_prefix = r"^(?:VO|VOIX(?:\s*OFF)?|VOICE(?:\s*OVER)?|VOICEOVER|NARRATEUR|NARRATRICE|NARRATOR|SPEAKER)(?:\s*\([^)]*\))*\s*[:\-]\s*"
     s = re.sub(voice_prefix, "", s, flags=re.I).strip()
 
+    # 3b. Strip leading or mid-string speaker/stage cues (e.g. 'CLINICIAN 1 (calling down the hall): "..."')
+    # Matches either multi-token ALL-CAPS labels ('CLINICIAN 1:', 'MAN IN BLACK:') or Name (stage note):
+    speaker_cue = (
+        r"(?:^|(?<=\s)|(?<=[\"'.,!?\u2014\u2013-]))"
+        r"(?:"
+        r"[A-Z]{2,}[A-Z0-9_-]*(?:\s+[A-Z0-9_-]+)+(?:\s*\([^)]*\))*"
+        r"|[A-Z][A-Za-z0-9_-]*(?:\s+[A-Z0-9][A-Za-z0-9_-]*){0,3}\s*\([^)]+\)"
+        r"|(?:HOST|ANCHOR|REPORTER|INTERVIEWER|CLINICIAN|DOCTOR|DETECTIVE|CHARACTER|NARRATOR)(?:\s+\d+)?"
+        r")\s*:\s*[\"\u201c\u00ab]?"
+    )
+    s = re.sub(speaker_cue, " ", s).strip()
+
     # 4. Strip trailing text after closing quote (e.g. '...omnipotent.' Frustrated sigh.)
     s = re.sub(r"([»'\"])\s+(?:[A-Z][a-z0-9\s,–—-]+[.!?]?\s*)+$", r"\1", s)
 
@@ -55,8 +67,14 @@ def clean_voiceover(text: str) -> str:
     # 7. Strip trailing stage direction annotations with '+'
     s = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", s, flags=re.S)
 
-    # 8. Strip lingering outer quotation marks and whitespace
-    s = s.strip("'\"\u2018\u2019\u201c\u201d\u00ab\u00bb` ")
+    # 8. Strip lingering outer quotation marks and unbalanced double quotes, normalize whitespace
+    s = s.strip("'\"\u2018\u2019\u201c\u201d\u00ab\u00bb` \n\r\t")
+    if s.count('"') % 2 == 1:
+        s = s.replace('"', "")
+    if s.count("\u201c") != s.count("\u201d"):
+        s = s.replace("\u201c", "").replace("\u201d", "")
+    if s.count("\u00ab") != s.count("\u00bb"):
+        s = s.replace("\u00ab", "").replace("\u00bb", "")
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
@@ -120,7 +138,7 @@ class ImageContext:
 class Storyboard:
     """
     Output of ScriptwriterAgent — the final deliverable.
-    A structured video storyboard with scenes, subtitles, audio cues,
+    A structured video storyboard with scene visual descriptions, spoken voiceover,
     and groundable image references.
     """
     title: str = ""
@@ -129,9 +147,9 @@ class Storyboard:
     # Each scene: {
     #   "scene_id": int,
     #   "description": str,       # visual description
-    #   "subtitle": str,          # on-screen text / caption
     #   "voiceover": str,         # pure spoken dialogue to be read aloud (NO 'VO:', NO SFX)
     #   "audio_cue": str,         # backward-compatible alias of voiceover
+    #   "subtitle": str,          # optional legacy field (not generated in new runs)
     #   "image_ref": str | None,  # symbolic identifier, e.g. "img1"
     #   "image_url": str | None,  # programmatically resolved from image_ref
     #   "duration_seconds": int,
@@ -274,7 +292,8 @@ class SharedState:
 
             md_lines.append(f"### Scene {scene_id} ({dur}s)")
             md_lines.append(f"- **Visual Description:** {desc}")
-            md_lines.append(f"- **Subtitle (On-screen):** *\"{sub}\"*")
+            if sub:
+                md_lines.append(f"- **Subtitle (On-screen):** *\"{sub}\"*")
             md_lines.append(f"- **Voiceover:** {voiceover}")
             if img_url:
                 md_lines.append(f"- **Image Asset:** [`{img_ref or 'asset'}`]({img_url})")

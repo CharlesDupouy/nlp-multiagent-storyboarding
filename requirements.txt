@@ -16,13 +16,16 @@ python-dotenv>=1.0.0   # load .env files for local development
 # YouTube metadata & transcript extraction (no API key needed)
 youtube-transcript-api>=1.2.0
 
-# Testing
-pytest>=8.0.0
+# Testing: uses Python stdlib unittest (python3 -m unittest discover tests)
+
+# Statistical testing in evaluation (Wilcoxon signed-rank test)
+scipy>=1.11.0
 
 # Video generation & neural TTS
 edge-tts>=7.0.0
 Pillow>=10.0.0
 imageio-ffmpeg>=0.5.0
 
-# Optional: nicer CLI output
+# Optional: nicer CLI output & Anthropic Claude judge backend (--preset claude)
 rich>=13.0.0
+# anthropic>=0.40.0

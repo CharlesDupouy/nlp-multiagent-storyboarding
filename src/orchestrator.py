@@ -35,7 +35,7 @@ from src.core.llm_client import (
     get_client,
     reset_token_usage,
     get_token_usage,
-    calculate_cost_usd,
+    get_session_cost_usd,
     set_reasoning_effort,
     get_reasoning_effort,
 )
@@ -66,6 +66,8 @@ class Orchestrator:
         api_key: str | None = None,
         reasoning_effort: str | None = "low",
         output_dir: str = "outputs",
+        target_duration: int = 60,
+        max_news_results: int = 5,
     ) -> None:
         self.reasoning_effort = reasoning_effort
         if reasoning_effort is not None:
@@ -76,11 +78,19 @@ class Orchestrator:
         self.profiler = ProfilerAgent(model=profiler_model, client=client)
         self.writers_room = WritersRoomAgent(model=writers_room_model or profiler_model, client=client)
         self.director = DirectorAgent(model=director_model or scriptwriter_model, client=client)
-        self.knowledge_retriever = KnowledgeRetrieverAgent(model=retriever_model, client=client)
+        self.knowledge_retriever = KnowledgeRetrieverAgent(
+            model=retriever_model,
+            client=client,
+            max_results=max_news_results,
+        )
         self.news_retriever = self.knowledge_retriever  # Backward-compatibility alias
         self.art_director = ArtDirectorAgent(model=image_model, client=client)
         self.image_searcher = self.art_director         # Backward-compatibility alias
-        self.scriptwriter = ScriptwriterAgent(model=scriptwriter_model, client=client)
+        self.scriptwriter = ScriptwriterAgent(
+            model=scriptwriter_model,
+            client=client,
+            target_duration=target_duration,
+        )
 
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -98,6 +108,7 @@ class Orchestrator:
 
         models = cfg.get("models", {})
         llm_cfg = cfg.get("llm", {})
+        pipeline_cfg = cfg.get("pipeline", {})
         return cls(
             profiler_model=models.get("profiler", "deepseek-chat"),
             writers_room_model=models.get("writers_room", "deepseek-chat"),
@@ -109,6 +120,8 @@ class Orchestrator:
             api_key=llm_cfg.get("api_key"),
             reasoning_effort=llm_cfg.get("reasoning_effort", "low"),
             output_dir=cfg.get("output_dir", "outputs"),
+            target_duration=pipeline_cfg.get("target_duration_seconds", 60),
+            max_news_results=pipeline_cfg.get("max_news_results", 5),
         )
 
     def run(self, videos: list[dict[str, str]], user_id: str | None = None) -> SharedState:
@@ -164,10 +177,8 @@ class Orchestrator:
 
         # Audit token accounting
         usage = get_token_usage()
-        cost = calculate_cost_usd(
-            usage.get("prompt_tokens", 0),
-            usage.get("completion_tokens", 0),
-            model=self.scriptwriter.model if usage.get("reasoning_tokens", 0) > 0 else None,
+        cost = get_session_cost_usd(
+            fallback_model=self.scriptwriter.model if usage.get("reasoning_tokens", 0) > 0 else None,
         )
         state.token_usage = usage
         state.estimated_cost_usd = cost

@@ -24,7 +24,7 @@ Evaluate strictly on these 5 dimensions (1 to 5 integer Likert scale):
    - 2: (CAPPED) Remake, rehash, or retell of a video already present in watch history.
    - 1: Generic template or direct copy of a watched video.
 3. Completeness:
-   - 5: Fully specified for every scene (visual descriptions, punchy subtitles, producible verbatim voiceover).
+   - 5: Fully specified for every scene (vivid visual descriptions, producible verbatim voiceover, clear scene durations).
    - 3: Components present but thin or uneven.
    - 1: Major components missing or only a vague outline.
 4. Coherence:

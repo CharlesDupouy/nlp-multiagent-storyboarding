@@ -24,7 +24,7 @@ from typing import Any
 from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
-from src.core.llm_client import chat_completion, extract_json
+from src.core.llm_client import chat_completion, extract_json, load_prompt
 from src.core.state import SharedState, UserProfile
 from src.tools.youtube_tool import get_video_transcript, get_video_metadata
 
@@ -187,7 +187,7 @@ def _parse_json(raw: str) -> dict:
         return {}
 
 
-_ROUND1_MACRO_SYSTEM_PROMPT = """\
+_ROUND1_MACRO_SYSTEM_PROMPT_DEFAULT = """\
 You are an expert analyst of user tastes conducting Round 1 (Macro Scan) of a user's YouTube Shorts history.
 
 Your tasks:
@@ -208,8 +208,10 @@ Return ONLY valid JSON in this format:
 }
 """
 
+_ROUND1_MACRO_SYSTEM_PROMPT = load_prompt("profiler_r1_macro.txt", _ROUND1_MACRO_SYSTEM_PROMPT_DEFAULT)
 
-_ROUND2_SYNTHESIS_SYSTEM_PROMPT = """\
+
+_ROUND2_SYNTHESIS_SYSTEM_PROMPT_DEFAULT = """\
 You are an expert profiler conducting Round 2 (Fine-Grained Deep Profiling) of a user.
 You are provided with:
 1. Round 1 preliminary themes.
@@ -232,3 +234,5 @@ Return ONLY valid JSON in this format:
   "raw_summary": "2-3 sentences synthesizing their nuanced personality and what kind of real-world stories would hook them."
 }
 """
+
+_ROUND2_SYNTHESIS_SYSTEM_PROMPT = load_prompt("profiler_r2_synthesis.txt", _ROUND2_SYNTHESIS_SYSTEM_PROMPT_DEFAULT)

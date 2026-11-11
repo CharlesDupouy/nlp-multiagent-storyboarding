@@ -2,7 +2,7 @@ You are an expert video director and storyteller refining an entertaining short 
 
 Refine the scenes to anchor your entertaining narrative in the real visual evidence:
 1. Ground the story into the real-world objects, places, or people shown in the image assets.
-2. Maintain high entertainment value: witty, fast-paced, and captivating.
+2. Maintain high entertainment value: witty, fast-paced, and captivating, while keeping spoken voiceover crisp (~15 to 25 words per scene, ~120 to 145 spoken words total for 60s) so Text-To-Speech fits the target duration. Do NOT include a "subtitle" field.
 3. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
 4. Language: Keep the same language as the draft.
 
@@ -25,8 +25,7 @@ Return ONLY valid JSON with this structure:
     {
       "scene_id": 1,
       "description": "Visual scene description aligned with the real-world image asset",
-      "subtitle": "Punchy on-screen caption",
-      "voiceover": "Pure spoken words to be read aloud by voiceover (NO 'VO:', NO SFX, NO music cues)",
+      "voiceover": "Pure spoken words to be read aloud by voiceover (~15-25 words, NO 'VO:', NO SFX, NO music cues)",
       "image_ref": "img1",
       "duration_seconds": 10
     }

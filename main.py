@@ -87,9 +87,13 @@ def main() -> None:
         dur = s.get("duration_seconds", "?")
         desc = s.get("description", "")
         sub = s.get("subtitle", "")
+        voiceover = s.get("voiceover") or s.get("audio_cue", "")
         img = s.get("image_url") or s.get("image_ref") or "None"
         print(f"  [Scene {idx} ({dur}s)] {desc}")
-        print(f"    Subtitle: \"{sub}\"")
+        if sub:
+            print(f"    Subtitle: \"{sub}\"")
+        if voiceover:
+            print(f"    Voiceover: \"{voiceover}\"")
         if img != "None":
             print(f"    Visual Asset: {img}")
         print()

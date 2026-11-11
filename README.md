@@ -20,7 +20,7 @@ python3 main.py --history data/user_histories/example.json
 # 4. Run the single-agent baseline on the exact same history
 python3 main.py --history data/user_histories/example.json --baseline
 
-# 5. Render a storyboard JSON into a video sketch (TTS + subtitles + slideshow MP4)
+# 5. Render a storyboard JSON into a video sketch (TTS + visual description footer + slideshow MP4)
 python3 storyboard_to_video.py outputs/<user>/agentic/agentic_storyboard_<user>_<datetime>.json
 
 # 6. Run LLM-as-a-Judge comparison (side-by-side with position debiasing)
@@ -49,7 +49,7 @@ flowchart TD
     S1 --> ART["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no cinematography fluff)\n2. Candidate retrieval (4 per scene via Unsplash API)\n3. Semantic re-ranking to select most representative photo"]
     ART --> S2["Phase 7: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
     S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated Unsplash CDN URLs (no hallucination)"]
-    RES --> O["Storyboard JSON & Markdown\n(Pitches, Director Decision, Scenes, Subtitles, Narration, Image URLs)"]
+    RES --> O["Storyboard JSON & Markdown\n(Pitches, Director Decision, Scenes, Voiceover, Image URLs)"]
 ```
 
 ---
@@ -84,7 +84,7 @@ To collect watch histories from study participants without API keys or credentia
 ```
 .
 ├── main.py                        # Top-level CLI (pipeline & baseline execution)
-├── storyboard_to_video.py         # Video sketch renderer (JSON -> MP4 with TTS & subtitles)
+├── storyboard_to_video.py         # Video sketch renderer (JSON -> MP4 with TTS & visual descriptions)
 ├── GEMINI.md                      # Machine & agent onboarding specification
 ├── configs/config.yaml            # Model and API configuration
 ├── src/
@@ -107,7 +107,7 @@ To collect watch histories from study participants without API keys or credentia
 │       ├── image_tool.py          # Unsplash API search with query sanitization
 │       └── import_user_history.py # CLI ingestion, title enrichment & random split helper
 ├── baseline/
-│   └── single_agent_baseline.py   # Scientifically neutral single-agent baseline (with naive Top-1 image search)
+│   └── single_agent_baseline.py   # Scientifically neutral single-agent baseline (DeepSeek Reasoner low + Top-1 image search)
 ├── evaluation/
 │   └── llm_judge.py               # Batch & pairwise LLM judge with position debiasing (grades on 5 + win rates)
 ├── data/

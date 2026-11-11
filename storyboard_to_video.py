@@ -28,6 +28,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 FPS = 25
 SAMPLE_RATE = 44100
+DEFAULT_PADDING = 0.3
 
 
 # --------------------------------------------------------------------------- #
@@ -40,10 +41,6 @@ def load_scenes(path):
     scenes = sb["scenes"] if isinstance(sb, dict) else sb
     return sb.get("title", "storyboard") if isinstance(sb, dict) else "storyboard", scenes
 
-
-_VOICE_LABELS = r"(?:VOIX(?:\s*OFF)?|VOICE(?:\s*OVER)?|VOICEOVER|VO|NARRATEUR|NARRATRICE|NARRATOR)"
-_SFX_LABELS = r"(?:SFX|FX|BRUITAGE|MUSIQUE|MUSIC|SOUND|SON)"
-_QUOTES = "'\"\u2018\u2019\u201c\u201d\u00ab\u00bb` "
 
 FRENCH_STOPWORDS = {
     "le", "la", "les", "un", "une", "des", "du", "de", "d'", "l'", "et", "est", "dans",
@@ -74,49 +71,20 @@ def detect_language(scenes):
 
 def clean_audio_cue(cue, raw=False):
     """
-    Cleans audio cues or voiceover into pure spoken script dialogue:
-    - Strips bracketed or parenthesized SFX tags (e.g. '[SFX: ...]', '(SFX: ...)')
-    - Strips leading SFX blocks (e.g. 'SFX: bell rings. VO: Hello')
-    - Strips voice labels and descriptors (e.g. 'VO (flat, dead-direct):', 'Voix off :', 'Voiceover:')
-    - Strips trailing SFX blocks (e.g. 'SFX: low hum...', 'SFX : bruit...')
-    - Strips trailing inline SFX mentions (e.g. 'Deep rumble SFX.', 'Grunt SFX, rock crumbling.')
-    - Strips trailing sound effect annotations (e.g. '+ beat de révélation (whoosh)')
-    - Extracts dialogue from explicit quotes (« ... », " ... ", ' ... ')
-    - Normalizes whitespace
+    Cleans audio cues or voiceover into pure spoken script dialogue via clean_voiceover(),
+    stripping SFX, narrator prefixes, and mid-string speaker/stage cues.
     """
     cue = (cue or "").strip()
     if raw or not cue:
         return cue
-
-    s = cue
-
-    # 1. Strip bracketed or parenthesized SFX tags anywhere
-    s = re.sub(r"\[(?:SFX|FX|SOUND|BRUITAGE)[^\]]*\]", "", s, flags=re.I)
-    s = re.sub(r"\((?:SFX|FX|SOUND|BRUITAGE)[^)]*\)", "", s, flags=re.I)
-
-    # 2. If SFX is at the very beginning, strip the leading SFX block
-    s = re.sub(r"^(?:SFX|FX|BRUITAGE|MUSIQUE|MUSIC|SOUND)\s*[:\-][^.!?\n]*[.!?]?\s*", "", s, flags=re.I).strip()
-
-    # 3. Strip leading voice/narrator labels with optional parenthetical descriptors
-    voice_prefix = r"^(?:VO|VOIX(?:\s*OFF)?|VOICE(?:\s*OVER)?|VOICEOVER|NARRATEUR|NARRATRICE|NARRATOR|SPEAKER)(?:\s*\([^)]*\))*\s*[:\-]\s*"
-    s = re.sub(voice_prefix, "", s, flags=re.I).strip()
-
-    # 4. Strip trailing text after closing quote (e.g. '...omnipotent.' Frustrated sigh.)
-    s = re.sub(r"([»'\"])\s+(?:[A-Z][a-z0-9\s,–—-]+[.!?]?\s*)+$", r"\1", s)
-
-    # 5. Strip trailing SFX blocks
-    s = re.sub(r"\b(?:SFX|FX|BRUITAGE|MUSIQUE|MUSIC|SOUND)\s*[:\-].*$", "", s, flags=re.I | re.S)
-
-    # 6. Strip trailing inline SFX mentions
-    s = re.sub(r"\s*['\"]?\s*[^'\"\n]*\b(?:SFX|FX)\b[^'\"\n]*\.?\s*$", "", s, flags=re.I)
-
-    # 7. Strip trailing stage direction annotations with '+'
-    s = re.sub(r"\s*[»'\"]?\s*\+\s*.*$", "", s, flags=re.S)
-
-    # 8. Strip lingering outer quotation marks and whitespace
-    s = s.strip(_QUOTES + " \n")
-    s = re.sub(r"\s+", " ", s).strip()
-    return s or cue
+    try:
+        from src.core.state import clean_voiceover
+    except ImportError:
+        repo_root = str(Path(__file__).resolve().parent)
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+        from src.core.state import clean_voiceover
+    return clean_voiceover(cue) or cue
 
 
 # --------------------------------------------------------------------------- #
@@ -476,7 +444,6 @@ class TTS:
 
         run(["ffmpeg", "-y", "-i", str(raw), "-ar", str(SAMPLE_RATE), "-ac", "2", str(out_wav)])
         raw.unlink(missing_ok=True)
-        raw.unlink(missing_ok=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -539,8 +506,8 @@ def main():
     ap.add_argument("--rate", type=int, default=170, help="TTS speaking rate (words/min)")
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720, help="use 1920 x 1080 for vertical shorts, etc.")
-    ap.add_argument("--padding", type=float, default=1.0,
-                    help="seconds of silence before and after the speech in each scene (default: 1.0)")
+    ap.add_argument("--padding", type=float, default=DEFAULT_PADDING,
+                    help=f"seconds of silence before and after the speech in each scene (default: {DEFAULT_PADDING})")
     ap.add_argument("--json-durations", action="store_true",
                     help="use duration_seconds from the storyboard instead of the speech length")
     ap.add_argument("--raw-audio", action="store_true",

@@ -91,16 +91,16 @@ METRICS = {
         "5 = surprising, memorable concept with high novelty that still clearly fits the user."
     ),
     "completeness": (
-        "Whether the storyboard fully specifies a producible short video: scene descriptions, "
-        "subtitles, AND voiceover.\n"
+        "Whether the storyboard fully specifies a producible short video: vivid visual descriptions, "
+        "producible verbatim voiceover, and coherent scene durations.\n"
         "1 = major components missing or only a vague outline.\n"
-        "2 = several scenes lack subtitles or voiceover, or key details are missing.\n"
+        "2 = several scenes lack clear visual descriptions or voiceover, or key details are missing.\n"
         "3 = all components present but thin or uneven.\n"
         "4 = complete and specific, minor gaps.\n"
-        "5 = fully specified for every scene (visuals, subtitles, voiceover), ready to produce."
+        "5 = fully specified for every scene (visual descriptions, verbatim voiceover, pacing), ready to produce."
     ),
     "coherence": (
-        "Narrative flow and consistency: do scenes, subtitles and voiceover fit together as one "
+        "Narrative flow and consistency: do scenes and voiceover fit together as one "
         "watchable short with a hook and a payoff?\n"
         "1 = disjointed or contradictory.\n"
         "2 = weak flow; scenes feel unconnected.\n"
@@ -214,7 +214,7 @@ For each criterion, assign a grade on 5 (1 to 5 integer scale) to Storyboard A a
 
 1. relevance: How well the storyboard connects to ANY genuine interest cluster in the watch history (Multi-Facet Relevance).
 2. creativity: Concept novelty, distinctive hook/angle. Penalize direct remakes/rehashes of watched videos (Anti-Regurgitation Penalty: CAP at 2/5).
-3. completeness: Full specification of visual descriptions, punchy subtitles, and voiceover for every scene (1-5).
+3. completeness: Full specification of vivid visual descriptions, producible verbatim voiceover, and scene durations for every scene (1-5).
 4. coherence: Narrative flow, progression, hook-to-payoff arc (1-5).
 5. visual_grounding: How faithfully the retrieved visual assets ('Visual Asset Photo') illustrate each scene's desired visual description (1-5).
 Overall: Which video would this specific user prefer to watch in their feed?
@@ -293,7 +293,8 @@ def render_storyboard(data: dict) -> str:
         lines.append(f"  Visual: {desc}")
         if image_desc:
             lines.append(f"  Visual Asset Photo: {image_desc}")
-        lines.append(f"  Subtitle: {subtitle}")
+        if subtitle:
+            lines.append(f"  Subtitle: {subtitle}")
         lines.append(f"  Voiceover: {voiceover}")
     return "\n".join(lines)
 

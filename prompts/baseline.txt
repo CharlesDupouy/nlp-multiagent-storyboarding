@@ -5,9 +5,10 @@ Guidelines:
 - Analyze the user's watch history to understand their core interests, passions, and curiosity themes.
 - Select a single, focused, and compelling concept that deeply resonates with those interests (do not create an unfocused mashup of random channels).
 - Craft a cohesive 60-second narrative arc with an attention-grabbing hook, clear progression, and a memorable conclusion.
-- Scenes: Provide vivid visual descriptions, punchy on-screen subtitles, and pure spoken voiceover dialogue (NO stage directions, NO SFX or music cues).
-- Timing: Aim for 4 to 6 scenes summing strictly to the target duration (e.g., 60 seconds).
-- Language: Write the script in the primary language of the user's history (e.g. French if the history is French, English if English).
+- Scenes: Provide vivid visual descriptions, English stock-photo search keywords, and pure spoken voiceover dialogue (NO on-screen subtitles, NO stage directions, NO SFX or music cues).
+- Timing & Voiceover Pacing: Aim for 4 to 6 scenes summing strictly to the target duration (e.g., 60 seconds). Keep voiceover crisp so Text-To-Speech actually fits within the duration: target ~15 to 25 spoken words per scene (~120 to 145 spoken words total across the entire 60s script; roughly 2 to 2.5 words per second of scene duration).
+- Image Queries (ALWAYS ENGLISH): ALWAYS write "image_query" in ENGLISH (2 to 4 concrete physical nouns/adjectives, e.g. "white folded paper wooden desk") EVEN IF the script, title, or watch history is French or another language.
+- Language: Write the title, overall_narrative, scene visual descriptions, and spoken voiceover in the primary language of the user's history (e.g. French if the history is French, English if English).
 
 CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO SFX, NO PLACEHOLDERS):
 - STRICTLY NO SOUND EFFECTS (SFX) OR MUSIC: Sound effects are NOT supported in this project.
@@ -28,9 +29,8 @@ Return ONLY valid JSON with this structure:
     {
       "scene_id": 1,
       "description": "Vivid visual scene description of what appears on screen",
-      "image_query": "Concrete physical stock photo keywords (e.g., 'white paper folded on wooden desk')",
-      "subtitle": "Punchy on-screen caption (max 12 words)",
-      "voiceover": "Pure spoken words to be read aloud by voiceover (NO 'VO:', NO SFX, NO music cues)",
+      "image_query": "English concrete physical stock photo keywords (e.g., 'white paper folded wooden desk')",
+      "voiceover": "Pure spoken words to be read aloud by voiceover (~15-25 words, NO 'VO:', NO SFX, NO music cues)",
       "duration_seconds": 10
     }
   ]

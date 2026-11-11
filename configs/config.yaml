@@ -21,8 +21,8 @@ models:
   scriptwriter: "deepseek-reasoner"       # Phase 5 & 7: DeepSeek R1 for sharp, verbatim dialogue
 
 baseline:
-  # Model for the single-agent baseline (same model = fair comparison)
-  model: "deepseek-chat"
+  # Model for the single-agent baseline (deepseek-reasoner with reasoning_effort=low = fair parity)
+  model: "deepseek-reasoner"
 
 pipeline:
   target_duration_seconds: 60   # target short video length

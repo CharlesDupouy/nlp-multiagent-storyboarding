@@ -16,12 +16,11 @@ Output written to state:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
-from src.core.llm_client import chat_completion, extract_json
+from src.core.llm_client import chat_completion, extract_json, load_prompt
 from src.core.state import SharedState
 
 
@@ -96,16 +95,6 @@ def _parse_pitches(raw: str) -> dict:
         return {"pitches": []}
 
 
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
-
-
-def _load_prompt(filename: str, default: str) -> str:
-    path = _PROMPTS_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8").strip()
-    return default.strip()
-
-
 _WRITERS_ROOM_SYSTEM_PROMPT_DEFAULT = """\
 You are the lead showrunner of a premier short-form video writers' room.
 Your mission is to pitch 3 DISTINCT, highly engaging 60-second video concepts tailored to the user's unique personality and watch history.
@@ -161,4 +150,4 @@ Return ONLY valid JSON with this structure:
 }
 """
 
-_WRITERS_ROOM_SYSTEM_PROMPT = _load_prompt("writers_room.txt", _WRITERS_ROOM_SYSTEM_PROMPT_DEFAULT)
+_WRITERS_ROOM_SYSTEM_PROMPT = load_prompt("writers_room.txt", _WRITERS_ROOM_SYSTEM_PROMPT_DEFAULT)
