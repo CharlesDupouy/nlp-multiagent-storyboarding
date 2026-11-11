@@ -945,6 +945,45 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(mock_get.call_count, 1)
         self.assertTrue(res[0]["url"].startswith("https://example.com/images/"))
 
+    def test_video_intro_padding_and_pcm_mkv_intermediates(self):
+        import types
+        import tempfile
+        from unittest.mock import patch
+        import storyboard_to_video as s2v
+
+        self.assertEqual(s2v.DEFAULT_PADDING, 0.3)
+        self.assertEqual(s2v.DEFAULT_INTRO_PADDING, 1.5)
+
+        captured_cmds = []
+        fake_tts = types.SimpleNamespace(synth=lambda text, wav: Path(wav).write_bytes(b"RIFF"))
+        args = types.SimpleNamespace(
+            padding=0.3,
+            intro_padding=1.5,
+            json_durations=False,
+            raw_audio=False,
+        )
+
+        with tempfile.TemporaryDirectory() as d, \
+             patch("storyboard_to_video.audio_duration", return_value=5.0), \
+             patch("storyboard_to_video.run", side_effect=lambda cmd: captured_cmds.append(cmd)):
+            tmp = Path(d)
+            c0 = s2v.build_scene_clip(
+                {"scene_id": 1, "description": "Opening desk shot", "voiceover": "Hello world.", "duration_seconds": 6},
+                0, tmp, fake_tts, (640, 360), args, lang="en",
+            )
+            c1 = s2v.build_scene_clip(
+                {"scene_id": 2, "description": "Second shot", "voiceover": "Next sentence.", "duration_seconds": 6},
+                1, tmp, fake_tts, (640, 360), args, lang="en",
+            )
+
+        self.assertEqual(c0.suffix, ".mkv")
+        self.assertEqual(c1.suffix, ".mkv")
+        cmd0_str = " ".join(captured_cmds[0])
+        cmd1_str = " ".join(captured_cmds[1])
+        self.assertIn("adelay=1500|1500,apad=whole_dur=6.8", cmd0_str)
+        self.assertIn("adelay=300|300,apad=whole_dur=5.6", cmd1_str)
+        self.assertIn("pcm_s16le", cmd0_str)
+
 
 if __name__ == "__main__":
     unittest.main()

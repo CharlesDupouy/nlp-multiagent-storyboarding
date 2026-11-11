@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw, ImageFont
 FPS = 25
 SAMPLE_RATE = 44100
 DEFAULT_PADDING = 0.3
+DEFAULT_INTRO_PADDING = 1.5
 
 
 # --------------------------------------------------------------------------- #
@@ -472,17 +473,21 @@ def build_scene_clip(scene, idx, tmp, tts, size, args, lang="fr"):
         make_silence(wav, 0.1)
 
     pad = args.padding
+    intro_pad = max(pad, args.intro_padding) if idx == 0 else pad
     json_duration = float(scene.get("duration_seconds", 5))
     if args.json_durations or not speech.strip():
         # Old behaviour (or nothing to say): trust the storyboard's duration.
-        duration, lead = json_duration, (pad if speech.strip() else 0.0)
+        duration, lead = json_duration, (intro_pad if speech.strip() else 0.0)
     else:
         speech_len = audio_duration(wav)
-        duration, lead = pad + speech_len + pad, pad
-        print(f"  speech {speech_len:.1f}s -> scene {duration:.1f}s (json said {json_duration:.0f}s)")
+        lead = intro_pad
+        duration = lead + speech_len + pad
+        print(f"  speech {speech_len:.1f}s -> scene {duration:.1f}s (lead {lead:.1f}s, json said {json_duration:.0f}s)")
 
-    clip = tmp / f"clip_{idx:03d}.mp4"
-    delay_ms = int(lead * 1000)
+    # Write intermediate clips in MKV with uncompressed PCM audio so multi-clip
+    # concatenation has zero per-clip AAC priming drift or MP4 edit-list offsets.
+    clip = tmp / f"clip_{idx:03d}.mkv"
+    delay_ms = int(round(lead * 1000))
     run(["ffmpeg", "-y",
          "-loop", "1", "-framerate", str(FPS), "-i", str(frame),
          "-i", str(wav),
@@ -490,7 +495,7 @@ def build_scene_clip(scene, idx, tmp, tts, size, args, lang="fr"):
          "-af", f"adelay={delay_ms}|{delay_ms},apad=whole_dur={duration}",
          "-t", f"{duration}",
          "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(FPS),
-         "-c:a", "aac", "-ar", str(SAMPLE_RATE), "-ac", "2",
+         "-c:a", "pcm_s16le", "-ar", str(SAMPLE_RATE), "-ac", "2",
          str(clip)])
     return clip
 
@@ -507,7 +512,9 @@ def main():
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720, help="use 1920 x 1080 for vertical shorts, etc.")
     ap.add_argument("--padding", type=float, default=DEFAULT_PADDING,
-                    help=f"seconds of silence before and after the speech in each scene (default: {DEFAULT_PADDING})")
+                    help=f"seconds of silence between/after scenes (default: {DEFAULT_PADDING})")
+    ap.add_argument("--intro-padding", type=float, default=DEFAULT_INTRO_PADDING,
+                    help=f"initial lead-in silence in seconds before Scene 1 speech so players/devices never cut opening words (default: {DEFAULT_INTRO_PADDING})")
     ap.add_argument("--json-durations", action="store_true",
                     help="use duration_seconds from the storyboard instead of the speech length")
     ap.add_argument("--raw-audio", action="store_true",
@@ -559,8 +566,10 @@ def main():
 
         listing = tmp / "clips.txt"
         listing.write_text("".join(f"file '{c.as_posix()}'\n" for c in clips), encoding="utf-8")
+        # Encode AAC once across the full concatenated PCM timeline with faststart for clean t=0 playback.
         run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(listing),
-             "-c", "copy", str(out_path)])
+             "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+             "-movflags", "+faststart", str(out_path)])
         print(f"\nDone -> {out_path} ({audio_duration(out_path):.1f}s)")
     finally:
         if args.keep_temp:
