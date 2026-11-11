@@ -104,8 +104,13 @@ def _build_director_prompt(profile: Any, pitches: list[dict[str, Any]]) -> str:
         f"Target Fit: {p.get('user_alignment_reason')}"
         for p in pitches
     )
+    clusters_str = profile.format_dominant_clusters() if hasattr(profile, "format_dominant_clusters") else "Not provided"
 
     return f"""\
+DOMINANT WATCH-HISTORY CLUSTERS (Ranked Descending by Frequency)
+================================================================
+{clusters_str}
+
 USER PROFILE
 ============
 Interests: {', '.join(profile.interests)}
@@ -117,7 +122,7 @@ CANDIDATE PITCHES:
 {pitches_str}
 
 TASK:
-Critique each pitch, select the SINGLE STRONGEST pitch for production, and write concrete Directorial Notes for the Researcher and Scriptwriter.
+Critique each pitch, select the SINGLE STRONGEST pitch for production (strongly favoring pitches anchored in the top DOMINANT watch-history clusters with a fresh, non-remake angle), and write concrete Directorial Notes for the Researcher and Scriptwriter.
 """
 
 
@@ -150,7 +155,7 @@ Your job is to make tough editorial decisions: review 3 pitches, critique them, 
 
 Evaluation Rubric:
 1. Hook & Retention Potential: Does the 3-second hook immediately stop the thumb scroll?
-2. Personal Resonance: Does this authentically match what this viewer loves without being generic?
+2. Personal Resonance & Cluster Alignment: Prioritize pitches that clearly extend one of the user's **DOMINANT multi-video watch-history clusters** (high video count / core fandoms or recurring curiosities visible in the watch history) with a fresh angle, rather than gambling on an obscure topic tied to only 1 outlier video while ignoring what the viewer watches most often.
 3. Originality (Anti-Regurgitation): REJECT any pitch that remakes, copies, or recaps a specific watched video or skit already in the user's history/transcripts — commission a fresh story/angle instead.
 4. Stock-Photo, Voiceover-Only & First-Watch Clarity: REJECT or heavily revise any pitch whose comedy/plot depends on reading tiny fabricated phone chat bubbles/text overlays, character-to-character dialogue, or in-scene character roleplay addressing a spectator ("I deal you the cards", "now flip this card"). Audio MUST be strictly a single external off-screen voiceover narrator, and every causal step (setup rules -> WHY the mechanism works -> payoff) must be crystal clear to a first-time viewer without prior knowledge.
 

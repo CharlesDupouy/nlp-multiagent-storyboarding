@@ -273,8 +273,8 @@ def chat_completion(
     thinking_active = is_reasoner and effective_effort != "none"
 
     # For reasoning models, reasoning tokens count against completion limit.
-    # Ensure sufficient token headroom (minimum 8192) to prevent output truncation.
-    call_max_tokens = max(max_tokens, 8192) if thinking_active else max_tokens
+    # Ensure sufficient token headroom (minimum 16384) to prevent output truncation.
+    call_max_tokens = max(max_tokens, 16384) if thinking_active else max_tokens
 
     call_kwargs: dict[str, Any] = {
         "model": resolved_model,

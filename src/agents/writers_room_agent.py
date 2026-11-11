@@ -87,8 +87,13 @@ class WritersRoomAgent(BaseAgent):
 
 def _build_writers_room_prompt(profile: Any) -> str:
     insights_str = "\n".join(f"- {ins}" for ins in profile.investigated_insights) if profile.investigated_insights else "None"
+    clusters_str = profile.format_dominant_clusters() if hasattr(profile, "format_dominant_clusters") else "Not provided"
 
     return f"""\
+DOMINANT WATCH-HISTORY CLUSTERS (Ranked Descending by Frequency)
+================================================================
+{clusters_str}
+
 USER PROFILE
 ============
 Interests: {', '.join(profile.interests)}
@@ -101,7 +106,7 @@ DEEP-DIVE TRANSCRIPT INSIGHTS:
 
 TASK:
 Brainstorm 3 DISTINCT, HIGH-POTENTIAL video pitches (each suitable for a 60-second Short).
-Make sure each pitch explores a DIFFERENT topic or angle from the user's profile and matches their natural style preference.
+MANDATORY RELEVANCE ANCHORING: Pitch 1 MUST extend the #1 largest dominant cluster above; Pitch 2 MUST extend the #2 largest cluster; Pitch 3 may cross-over a dominant cluster with a transcript insight. Never abandon the user's biggest multi-video clusters to chase 1-video outliers across all pitches.
 """
 
 
@@ -133,10 +138,11 @@ Crucial Guidelines:
    - If they love puzzles, math, or tech, pitch mindbending, counterintuitive curiosities.
    - If they love nostalgia, pop culture, or gaming, pitch deep-dive lore, hidden details, or controversies.
    - Do NOT force a single rigid format on every user.
-2. DIVERSITY across the 3 pitches:
-   - Pitch 1: Explores one major interest pillar from their profile.
-   - Pitch 2: Explores a second distinct passion or transcript insight.
-   - Pitch 3: A creative cross-over or surprising angle they wouldn't expect.
+2. CLUSTER-ANCHORED DIVERSITY across the 3 pitches (CRITICAL):
+   - Always check `DOMINANT WATCH-HISTORY CLUSTERS` (ranked by video count / share) before pitching! NEVER fill all 3 pitches with topics extrapolated from 1-video outliers while ignoring major multi-video clusters (e.g., if 25% of the history is Game of Thrones / medieval fantasy or 20% is Math/Logic puzzles, you MUST anchor directly to those clusters).
+   - Pitch 1: MUST directly extend the #1 largest dominant cluster in the watch history (e.g., if they watch heavy fantasy lore/trial-by-combat or math puzzles, pitch a fresh real-world story/mechanism tailored to THAT core obsession).
+   - Pitch 2: MUST directly extend the #2 largest recurring cluster (or a major second multi-video cluster).
+   - Pitch 3: A creative cross-over bridging a recurring cluster with an unexpected real-world curiosity or deep-dive transcript insight.
 3. Every pitch MUST have an instant 3-second hook that stops the scroll.
 4. NO REMAKES / ANTI-REGURGITATION (CRITICAL):
    - NEVER pitch a remake, recap, or direct variation of a specific video or skit already in the user's watch history or transcripts. Extend their underlying curiosity into a BRAND-NEW topic, story, or mechanism they haven't seen.

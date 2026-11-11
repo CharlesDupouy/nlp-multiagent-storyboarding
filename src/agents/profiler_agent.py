@@ -25,7 +25,7 @@ from openai import OpenAI
 
 from src.agents.base_agent import BaseAgent
 from src.core.llm_client import chat_completion, extract_json, load_prompt
-from src.core.state import SharedState, UserProfile
+from src.core.state import SharedState, UserProfile, format_cluster_list
 from src.tools.youtube_tool import get_video_transcript, get_video_metadata, detect_text_language
 
 
@@ -84,7 +84,16 @@ Analyze this user's overall tastes and select up to {self.max_investigate} speci
             investigate_targets = [{"vid_id": f"vid{i+1}", "reason": "Representative video"} for i in range(min(3, len(videos)))]
 
         self._log(state, f"Round 1 completed. Selected {len(investigate_targets)} videos for deep transcript inspection.")
-        if r1_data.get("preliminary_themes"):
+        r1_clusters = r1_data.get("interest_clusters", [])
+        if isinstance(r1_clusters, list) and r1_clusters:
+            top_preview = ", ".join(
+                f"{c.get('cluster')} ({c.get('video_count', '?')})"
+                for c in r1_clusters[:4]
+                if isinstance(c, dict) and c.get("cluster")
+            )
+            if top_preview:
+                self._log(state, f"  Ranked R1 clusters: {top_preview}")
+        elif r1_data.get("preliminary_themes"):
             self._log(state, f"  Preliminary themes: {', '.join(str(t) for t in r1_data.get('preliminary_themes', [])[:5])}")
 
         # Detect dominant watch-history language so transcripts prefer native captions
@@ -142,20 +151,24 @@ Analyze this user's overall tastes and select up to {self.max_investigate} speci
             )
         evidence_text = "\n".join(evidence_blocks)
 
+        r1_cluster_text = format_cluster_list(r1_clusters) if isinstance(r1_clusters, list) else "None"
         lang_label = "French" if history_lang == "fr" else "English"
         user_prompt_r2 = f"""\
+ROUND 1 RANKED INTEREST CLUSTERS (by frequency across all {len(videos)} videos):
+{r1_cluster_text}
+
 ROUND 1 PRELIMINARY THEMES:
 {json.dumps(r1_data.get('preliminary_themes', []), ensure_ascii=False)}
+
+COMPLETE WATCH HISTORY ({len(videos)} videos — maintain proportion and weight):
+{history_text}
 
 DOMINANT WATCH HISTORY LANGUAGE: {lang_label} (prefer {lang_label} when generating the final script unless all history items are in another language)
 
 INVESTIGATED VIDEO SPOKEN TRANSCRIPTS:
 {evidence_text}
 
-FULL WATCH HISTORY SUMMARY:
-User has watched {len(videos)} videos spanning topics like {', '.join(r1_data.get('preliminary_interests', [])[:6])}.
-
-Synthesize a deeply fine-grained, nuanced UserProfile using the spoken words and specific details uncovered in the transcripts.
+Synthesize a deeply fine-grained, cluster-weighted UserProfile uniting the FULL watch-history frequency distribution with the concrete nuances uncovered in the transcripts.
 """
         raw_r2 = chat_completion(
             client=self.client,
@@ -163,23 +176,30 @@ Synthesize a deeply fine-grained, nuanced UserProfile using the spoken words and
             system_prompt=_ROUND2_SYNTHESIS_SYSTEM_PROMPT,
             user_prompt=user_prompt_r2,
             temperature=0.4,
-            max_tokens=1500,
+            max_tokens=1800,
         )
 
         r2_data = _parse_json(raw_r2)
+        dominant_clusters = r2_data.get("dominant_clusters")
+        if not isinstance(dominant_clusters, list) or not dominant_clusters:
+            dominant_clusters = r1_clusters if isinstance(r1_clusters, list) else []
+
         state.user_profile = UserProfile(
             interests=r2_data.get("interests", r1_data.get("preliminary_interests", [])),
             themes=r2_data.get("themes", r1_data.get("preliminary_themes", [])),
             preferred_style=r2_data.get("preferred_style", "infotainment"),
             raw_summary=r2_data.get("raw_summary", ""),
             investigated_insights=r2_data.get("investigated_insights", []),
+            dominant_clusters=dominant_clusters,
         )
 
         self._log(
             state,
-            f"Round 2 complete. Fine-grained profile established ({len(state.user_profile.interests)} niche interests, "
-            f"{len(state.user_profile.investigated_insights)} transcript insights).",
+            f"Round 2 complete. Fine-grained profile established ({len(state.user_profile.dominant_clusters)} ranked clusters, "
+            f"{len(state.user_profile.interests)} niche interests, {len(state.user_profile.investigated_insights)} transcript insights).",
         )
+        if state.user_profile.dominant_clusters:
+            self._log(state, f"  Top clusters:\n    " + state.user_profile.format_dominant_clusters(limit=3).replace("\n", "\n    "))
         self._log(state, f"  Preferred style: {state.user_profile.preferred_style}")
         self._log(state, f"  Top interests:   {', '.join(state.user_profile.interests[:6])}")
         if state.user_profile.raw_summary:
@@ -203,18 +223,27 @@ _ROUND1_MACRO_SYSTEM_PROMPT_DEFAULT = """\
 You are an expert analyst of user tastes conducting Round 1 (Macro Scan) of a user's YouTube Shorts history.
 
 Your tasks:
-1. Identify high-level interest clusters and preliminary themes.
-2. Select 3 to 4 specific video IDs (e.g. "vid4", "vid12") that are ambiguous, surprising, or central, where inspecting the spoken transcript would reveal the exact subject being explored.
-3. For each selected video, state the specific reason/hypothesis you want to verify.
+1. Group the FULL watch history into clear recurring interest clusters ranked from LARGEST (`video_count` / share) to smallest — distinguishing dominant recurring clusters (e.g., 5–8 videos on Game of Thrones or Math Puzzles) from 1-video outliers.
+2. Identify high-level interest tags and preliminary themes.
+3. Select 3 to 4 specific video IDs (e.g. "vid4", "vid12") to inspect transcripts: MUST allocate at least 2 slots to central/representative videos from the TOP 2 largest recurring clusters, and at most 1–2 slots to ambiguous or surprising titles.
+4. For each selected video, state the specific reason/hypothesis you want to verify.
 
 Return ONLY valid JSON in this format:
 {
+  "interest_clusters": [
+    {
+      "cluster": "Specific recurring topic or fandom cluster",
+      "video_count": 7,
+      "vid_ids": ["vid10", "vid15"],
+      "example_titles": ["Short title 1", "Short title 2"]
+    }
+  ],
   "preliminary_interests": ["broad", "interest", "tags"],
   "preliminary_themes": ["macro", "themes"],
   "investigate_targets": [
     {
       "vid_id": "vid4",
-      "reason": "Verify what specific cartoon show and controversy was discussed in the video"
+      "reason": "Verify what specific angle/hook is discussed inside this top cluster video"
     }
   ]
 }
@@ -226,11 +255,13 @@ _ROUND1_MACRO_SYSTEM_PROMPT = load_prompt("profiler_r1_macro.txt", _ROUND1_MACRO
 _ROUND2_SYNTHESIS_SYSTEM_PROMPT_DEFAULT = """\
 You are an expert profiler conducting Round 2 (Fine-Grained Deep Profiling) of a user.
 You are provided with:
-1. Round 1 preliminary themes.
-2. The actual SPOKEN TRANSCRIPTS and dialogue from investigated videos.
+1. Ranked Round 1 interest clusters with exact video counts across the FULL watch history.
+2. The complete list of watched video titles (so dominant multi-video patterns are never forgotten!).
+3. The actual SPOKEN TRANSCRIPTS and dialogue from investigated videos.
 
-Your goal is to transform generic categories into precise, fine-grained niche passions based on what was actually said:
-- Use specific terminology, real controversies, creator perspectives, and cultural references revealed in the transcripts.
+Your goal is to balance cluster frequency (what this user watches MOST often) with deep transcript nuance:
+- Preserve and refine `dominant_clusters` ranked descending by frequency (`video_count`), accurately reflecting the FULL history (NEVER treat a 1-video outlier transcript as the user's #1 interest if 5–10 videos belong to another fandom, genre, or curiosity cluster).
+- Transform broad categories into fine-grained passions using specific terminology, real controversies, creator perspectives, and cultural references revealed in both recurring titles and transcripts.
 - When summarizing a transcript insight or joke, include its premise/cause cleanly (never orphan a punchline from what triggered it).
 - Highlight 2-4 concrete insights discovered from the spoken dialogue.
 - Remember: the user wants entertaining stories fueled by real facts and information (infotainment).
@@ -238,14 +269,22 @@ Your goal is to transform generic categories into precise, fine-grained niche pa
 
 Return ONLY valid JSON in this format:
 {
-  "interests": ["fine-grained", "highly specific", "passions with concrete nuance"],
+  "dominant_clusters": [
+    {
+      "cluster": "Highest-frequency interest cluster name",
+      "video_count": 7,
+      "share_pct": 27,
+      "example_titles": ["Exact title 1", "Exact title 2"]
+    }
+  ],
+  "interests": ["ranked from highest-frequency core passions to secondary curiosities"],
   "themes": ["core thematic pillars"],
   "preferred_style": "infotainment",
   "investigated_insights": [
     "From [vidX] transcript: user engages with [specific nuance/controversy/concept]",
     "From [vidY] transcript: user is fascinated by [specific mechanism]"
   ],
-  "raw_summary": "2-3 sentences synthesizing their nuanced personality and what kind of real-world stories would hook them."
+  "raw_summary": "2-3 sentences synthesizing their dominant watch-history clusters, nuanced personality, and dominant language."
 }
 """
 

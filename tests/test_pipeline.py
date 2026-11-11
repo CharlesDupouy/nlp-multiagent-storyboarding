@@ -579,11 +579,11 @@ class TestPipeline(unittest.TestCase):
 
             reset_token_usage()
 
-            # 2. Reasoner receives reasoning_effort="low", max_tokens>=8192, no temperature
+            # 2. Reasoner receives reasoning_effort="low", max_tokens>=16384, no temperature
             chat_completion(mock_client, "deepseek-reasoner", "sys", "usr", max_tokens=1500)
             kwargs_reasoner = mock_client.chat.completions.create.call_args.kwargs
             self.assertEqual(kwargs_reasoner.get("reasoning_effort"), "low")
-            self.assertEqual(kwargs_reasoner.get("max_tokens"), 8192)
+            self.assertEqual(kwargs_reasoner.get("max_tokens"), 16384)
             self.assertNotIn("temperature", kwargs_reasoner)
 
             usage = get_token_usage()
@@ -1044,6 +1044,136 @@ class TestPipeline(unittest.TestCase):
         )
         self.assertIn("first watch", _build_draft_prompt(st, 60))
         self.assertIn("external off-screen narrator", _build_refine_prompt(st))
+
+    def test_cluster_weighted_profiling_and_judge_relevance_rubric(self):
+        from unittest.mock import MagicMock, patch
+        import evaluation.llm_judge as judge_mod
+        from src.agents.director_agent import _DIRECTOR_SYSTEM_PROMPT, _DIRECTOR_SYSTEM_PROMPT_DEFAULT, _build_director_prompt
+        from src.agents.profiler_agent import (
+            ProfilerAgent,
+            _ROUND1_MACRO_SYSTEM_PROMPT,
+            _ROUND1_MACRO_SYSTEM_PROMPT_DEFAULT,
+            _ROUND2_SYNTHESIS_SYSTEM_PROMPT,
+            _ROUND2_SYNTHESIS_SYSTEM_PROMPT_DEFAULT,
+        )
+        from src.agents.writers_room_agent import _WRITERS_ROOM_SYSTEM_PROMPT, _build_writers_room_prompt
+        from src.core.state import SharedState, UserHistory, UserProfile
+
+        self.assertEqual(_ROUND1_MACRO_SYSTEM_PROMPT, _ROUND1_MACRO_SYSTEM_PROMPT_DEFAULT.strip())
+        self.assertEqual(_ROUND2_SYNTHESIS_SYSTEM_PROMPT, _ROUND2_SYNTHESIS_SYSTEM_PROMPT_DEFAULT.strip())
+        self.assertIn("dominant_clusters", _ROUND2_SYNTHESIS_SYSTEM_PROMPT)
+        self.assertIn("CLUSTER-ANCHORED", _WRITERS_ROOM_SYSTEM_PROMPT)
+        self.assertIn("DOMINANT multi-video watch-history clusters", _DIRECTOR_SYSTEM_PROMPT_DEFAULT)
+        self.assertIn("DOMINANT multi-video watch-history clusters", _DIRECTOR_SYSTEM_PROMPT)
+
+        pair_prompt = judge_mod.build_pair_prompt("- vid1\n- vid2", "Title: A", "Title: B")
+        rel_line = next(l for l in pair_prompt.splitlines() if l.startswith("1. relevance:"))
+        self.assertIn("Anti-Regurgitation", rel_line)
+        self.assertIn("3/5", rel_line)
+
+        mock_client = MagicMock()
+        r1 = MagicMock()
+        r1.choices = [MagicMock()]
+        r1.choices[0].message.content = (
+            '{"interest_clusters": [{"cluster": "GoT Lore", "video_count": 7, "example_titles": ["Aerion Trial"]}], '
+            '"preliminary_interests": ["GoT"], "preliminary_themes": ["Medieval"], '
+            '"investigate_targets": [{"vid_id": "vid1", "reason": "Top cluster"}]}'
+        )
+        r1.usage = None
+        r2 = MagicMock()
+        r2.choices = [MagicMock()]
+        r2.choices[0].message.content = (
+            '{"dominant_clusters": [{"cluster": "GoT Lore", "video_count": 7, "share_pct": 70, "example_titles": ["Aerion Trial"]}], '
+            '"interests": ["GoT trial by combat"], "themes": ["Medieval Law"], "preferred_style": "infotainment", '
+            '"investigated_insights": ["From vid1: trial by combat"], "raw_summary": "English GoT lore fan."}'
+        )
+        r2.usage = None
+        mock_client.chat.completions.create.side_effect = [r1, r2]
+
+        st = SharedState(
+            user_history=UserHistory(videos=[
+                {"title": "Aerion Refuses Trial By Combat", "url": "https://youtube.com/shorts/a1"},
+                {"title": "Rare Sanity Check Title", "url": "https://youtube.com/shorts/a2"},
+            ])
+        )
+        agent = ProfilerAgent(model="deepseek-chat", client=mock_client, max_investigate=1)
+        with patch("src.agents.profiler_agent.get_video_transcript", return_value="Trial by combat lore."), \
+             patch("src.agents.profiler_agent.get_video_metadata", return_value={"author": "LoreVault"}):
+            st = agent.run(st)
+
+        # Round 2 prompt received COMPLETE WATCH HISTORY including a2 even though only vid1 transcript was fetched
+        r2_user_prompt = mock_client.chat.completions.create.call_args_list[1].kwargs["messages"][1]["content"]
+        self.assertIn("COMPLETE WATCH HISTORY", r2_user_prompt)
+        self.assertIn("Rare Sanity Check Title", r2_user_prompt)
+        self.assertIn("GoT Lore (7 videos", r2_user_prompt)
+
+        # Dominant clusters round-trip through SharedState serialization & feed WritersRoom / Director
+        restored = SharedState.from_dict(st.to_dict())
+        self.assertEqual(restored.user_profile.dominant_clusters[0]["cluster"], "GoT Lore")
+        self.assertIn("GoT Lore (7 videos, ~70%)", _build_writers_room_prompt(restored.user_profile))
+        self.assertIn("GoT Lore (7 videos, ~70%)", _build_director_prompt(restored.user_profile, []))
+
+    def test_scriptwriter_refine_truncation_retry_and_fallback_preservation(self):
+        """ScriptwriterAgent.refine must retry on truncated scene counts and preserve missing draft scenes."""
+        import json
+        from unittest.mock import MagicMock
+        from src.agents.scriptwriter_agent import ScriptwriterAgent
+        from src.core.state import ImageContext, SharedState, Storyboard
+
+        st = SharedState(
+            storyboard=Storyboard(
+                title="Braess Paradox",
+                target_duration_seconds=60,
+                overall_narrative="Full arc setup + payoff.",
+                scenes=[
+                    {"scene_id": i, "description": f"Desc {i}", "voiceover": f"Voice {i}", "duration_seconds": 10}
+                    for i in range(1, 7)
+                ],
+            ),
+            image_context=ImageContext(
+                images=[
+                    {"image_id": f"img{i}", "target_scene_id": i, "url": f"https://images.unsplash.com/photo-{i}"}
+                    for i in range(1, 7)
+                ]
+            ),
+        )
+
+        trunc = MagicMock()
+        trunc.choices = [MagicMock()]
+        trunc.choices[0].message.content = json.dumps({
+            "title": "Braess Paradox",
+            "overall_narrative": "Full arc.",
+            "scenes": [
+                {"scene_id": i, "description": f"Ref {i}", "voiceover": f"RefVO {i}", "image_ref": f"img{i}", "duration_seconds": 10}
+                for i in range(1, 5)  # truncated after 4 of 6 scenes!
+            ],
+        })
+        trunc.usage = None
+
+        # Even if retry returns 5/6 scenes, trailing Scene 6 from Draft must be preserved & linked to img6
+        partial_retry = MagicMock()
+        partial_retry.choices = [MagicMock()]
+        partial_retry.choices[0].message.content = json.dumps({
+            "title": "Braess Paradox",
+            "overall_narrative": "Full arc.",
+            "scenes": [
+                {"scene_id": i, "description": f"Retry {i}", "voiceover": f"RetryVO {i}", "image_ref": f"img{i}", "duration_seconds": 10}
+                for i in range(1, 6)
+            ],
+        })
+        partial_retry.usage = None
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = [trunc, partial_retry]
+
+        agent = ScriptwriterAgent(model="deepseek-reasoner", client=mock_client)
+        res = agent.refine(st)
+
+        self.assertEqual(mock_client.chat.completions.create.call_count, 2)
+        self.assertEqual(len(res.storyboard.scenes), 6)
+        self.assertEqual(res.storyboard.scenes[5]["voiceover"], "Voice 6")
+        self.assertEqual(res.storyboard.scenes[5]["image_ref"], "img6")
+        self.assertEqual(res.storyboard.scenes[5]["image_url"], "https://images.unsplash.com/photo-6")
 
 
 if __name__ == "__main__":

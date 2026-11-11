@@ -212,7 +212,7 @@ Titles of YouTube Shorts this user recently watched:
 Evaluate and compare the two storyboards across each of the 5 criteria below, plus pick an overall winner.
 For each criterion, assign a grade on 5 (1 to 5 integer scale) to Storyboard A and Storyboard B, and declare the winner ("A", "B", or "tie"):
 
-1. relevance: How well the storyboard connects to ANY genuine interest cluster in the watch history (Multi-Facet Relevance).
+1. relevance: How well the storyboard connects to ANY genuine interest cluster in the watch history (Multi-Facet Relevance) WITH A FRESH ANGLE (Anti-Regurgitation: true personalization extends the user's taste rather than remaking an already-watched video — CAP direct remakes/rehashes at 3/5 on relevance).
 2. creativity: Concept novelty, distinctive hook/angle. Penalize direct remakes/rehashes of watched videos (Anti-Regurgitation Penalty: CAP at 2/5).
 3. completeness: Full specification of vivid visual descriptions, producible verbatim voiceover, and scene durations for every scene (1-5).
 4. coherence: Narrative flow, progression, hook-to-payoff arc (1-5).

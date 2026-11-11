@@ -1,18 +1,27 @@
 You are an expert analyst of user tastes conducting Round 1 (Macro Scan) of a user's YouTube Shorts history.
 
 Your tasks:
-1. Identify high-level interest clusters and preliminary themes.
-2. Select 3 to 4 specific video IDs (e.g. "vid4", "vid12") that are ambiguous, surprising, or central, where inspecting the spoken transcript would reveal the exact subject being explored.
-3. For each selected video, state the specific reason/hypothesis you want to verify.
+1. Group the FULL watch history into clear recurring interest clusters ranked from LARGEST (`video_count` / share) to smallest — distinguishing dominant recurring clusters (e.g., 5–8 videos on Game of Thrones or Math Puzzles) from 1-video outliers.
+2. Identify high-level interest tags and preliminary themes.
+3. Select 3 to 4 specific video IDs (e.g. "vid4", "vid12") to inspect transcripts: MUST allocate at least 2 slots to central/representative videos from the TOP 2 largest recurring clusters, and at most 1–2 slots to ambiguous or surprising titles.
+4. For each selected video, state the specific reason/hypothesis you want to verify.
 
 Return ONLY valid JSON in this format:
 {
+  "interest_clusters": [
+    {
+      "cluster": "Specific recurring topic or fandom cluster",
+      "video_count": 7,
+      "vid_ids": ["vid10", "vid15"],
+      "example_titles": ["Short title 1", "Short title 2"]
+    }
+  ],
   "preliminary_interests": ["broad", "interest", "tags"],
   "preliminary_themes": ["macro", "themes"],
   "investigate_targets": [
     {
       "vid_id": "vid4",
-      "reason": "Verify what specific cartoon show and controversy was discussed in the video"
+      "reason": "Verify what specific angle/hook is discussed inside this top cluster video"
     }
   ]
 }

@@ -98,6 +98,35 @@ class UserProfile:
     preferred_style: str = ""          # e.g. "educational", "entertaining", "infotainment"
     raw_summary: str = ""              # free-text profile written by the LLM
     investigated_insights: list[str] = field(default_factory=list)  # insights from video transcripts
+    dominant_clusters: list[dict[str, Any]] = field(default_factory=list)  # ranked multi-video clusters with counts
+
+    def format_dominant_clusters(self, limit: int = 6) -> str:
+        """Format ranked interest clusters with counts/shares for downstream prompts."""
+        return format_cluster_list(self.dominant_clusters, limit=limit)
+
+
+def format_cluster_list(clusters: list[Any], limit: int = 6) -> str:
+    """Format cluster dicts (cluster, video_count, share_pct, example_titles) consistently."""
+    lines: list[str] = []
+    for i, c in enumerate(clusters[:limit], 1):
+        if isinstance(c, dict):
+            name = str(c.get("cluster") or c.get("name") or "").strip()
+            if not name:
+                continue
+            cnt = c.get("video_count")
+            pct = c.get("share_pct")
+            examples = c.get("example_titles") or []
+            meta_parts: list[str] = []
+            if cnt is not None:
+                meta_parts.append(f"{cnt} videos")
+            if pct is not None:
+                meta_parts.append(f"~{pct}%")
+            meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
+            ex_str = f" — e.g. {', '.join(repr(str(e)[:55]) for e in examples[:3])}" if examples else ""
+            lines.append(f"{i}. {name}{meta}{ex_str}")
+        elif str(c).strip():
+            lines.append(f"{i}. {str(c).strip()}")
+    return "\n".join(lines) or "No pre-ranked cluster counts provided; use overall profile interests."
 
 
 @dataclass
@@ -248,6 +277,7 @@ class SharedState:
                 preferred_style=profile_data.get("preferred_style", ""),
                 raw_summary=profile_data.get("raw_summary", ""),
                 investigated_insights=profile_data.get("investigated_insights", []),
+                dominant_clusters=profile_data.get("dominant_clusters", []),
             ),
             candidate_pitches=data.get("candidate_pitches", []),
             selected_pitch=data.get("selected_pitch", {}),
@@ -336,6 +366,14 @@ class SharedState:
 
         if self.user_profile.interests:
             md_lines.append("## Inferred User Profile")
+            if self.user_profile.dominant_clusters:
+                top_cl = ", ".join(
+                    f"{c.get('cluster', '')} ({c.get('video_count', '?')})"
+                    for c in self.user_profile.dominant_clusters[:5]
+                    if isinstance(c, dict) and c.get("cluster")
+                )
+                if top_cl:
+                    md_lines.append(f"- **Dominant Clusters:** {top_cl}")
             md_lines.append(f"- **Interests:** {', '.join(self.user_profile.interests)}")
             md_lines.append(f"- **Themes:** {', '.join(self.user_profile.themes)}")
             md_lines.append(f"- **Style:** {self.user_profile.preferred_style}")

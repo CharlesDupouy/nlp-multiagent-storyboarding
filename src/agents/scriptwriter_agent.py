@@ -76,6 +76,9 @@ class ScriptwriterAgent(BaseAgent):
             self._log(state, "No draft scenes found to refine. Running draft first.")
             return self.draft(state)
 
+        draft_scenes = list(state.storyboard.scenes)
+        expected_count = len(draft_scenes)
+
         user_prompt = _build_refine_prompt(state)
         raw_response = chat_completion(
             client=self.client,
@@ -87,14 +90,62 @@ class ScriptwriterAgent(BaseAgent):
         )
 
         refined_data = _parse_storyboard_response(raw_response)
-        if refined_data.get("scenes"):
-            state.storyboard.scenes = refined_data["scenes"]
+        refined_scenes = refined_data.get("scenes") or []
+
+        # Guard against truncated reasoning outputs dropping trailing payoff scenes.
+        if len(refined_scenes) < expected_count:
+            self._log(
+                state,
+                f"⚠ Refine pass returned {len(refined_scenes)}/{expected_count} scenes (likely truncation); retrying once.",
+            )
+            retry_prompt = (
+                user_prompt
+                + f"\n\nCRITICAL: Your previous attempt returned only {len(refined_scenes)} of {expected_count} scenes. "
+                f"Return valid JSON containing ALL {expected_count} scenes (scene_id 1 through {expected_count}) completely."
+            )
+            retry_raw = chat_completion(
+                client=self.client,
+                model=self.model,
+                system_prompt=_REFINE_SYSTEM_PROMPT,
+                user_prompt=retry_prompt,
+                temperature=0.4,
+                max_tokens=6000,
+            )
+            retry_data = _parse_storyboard_response(retry_raw)
+            retry_scenes = retry_data.get("scenes") or []
+            if len(retry_scenes) >= len(refined_scenes):
+                refined_data = retry_data
+                refined_scenes = retry_scenes
+
+        if refined_scenes:
+            if len(refined_scenes) < expected_count:
+                self._log(
+                    state,
+                    f"⚠ Refine retry still returned {len(refined_scenes)}/{expected_count} scenes; preserving missing draft scenes with matched asset refs.",
+                )
+                merged = list(refined_scenes)
+                # Preserve trailing draft scenes cleanly and link catalog assets by target_scene_id.
+                target_to_img = {
+                    img.get("target_scene_id"): img.get("image_id")
+                    for img in state.image_context.images
+                    if img.get("target_scene_id") is not None and img.get("image_id")
+                }
+                for ds in draft_scenes[len(refined_scenes):]:
+                    fallback_scene = dict(ds)
+                    sid = fallback_scene.get("scene_id")
+                    if not fallback_scene.get("image_ref") and sid in target_to_img:
+                        fallback_scene["image_ref"] = target_to_img[sid]
+                    merged.append(fallback_scene)
+                refined_scenes = merged
+
+            state.storyboard.scenes = refined_scenes
             if refined_data.get("title"):
                 state.storyboard.title = refined_data["title"]
             if refined_data.get("overall_narrative"):
                 state.storyboard.overall_narrative = refined_data["overall_narrative"]
 
-        # Programmatically link image_ref -> real image_url
+        # Normalize voiceovers/durations and programmatically link image_ref -> real image_url
+        state.storyboard.sanitize_scenes()
         state.storyboard.resolve_image_urls(state.image_context)
         total_dur = sum(int(s.get("duration_seconds", 0) or 0) for s in state.storyboard.scenes)
         self._log(
