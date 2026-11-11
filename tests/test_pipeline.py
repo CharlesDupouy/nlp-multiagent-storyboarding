@@ -984,6 +984,27 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("adelay=300|300,apad=whole_dur=5.6", cmd1_str)
         self.assertIn("pcm_s16le", cmd0_str)
 
+    def test_llm_client_bounded_timeout_and_retry_on_timeout(self):
+        import os
+        from unittest.mock import MagicMock, patch
+        from src.core.llm_client import chat_completion, get_client
+
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test_key", "LLM_TIMEOUT_SECONDS": "95"}, clear=False):
+            client = get_client()
+        self.assertEqual(client.timeout, 95.0)
+        self.assertEqual(client.max_retries, 0)
+
+        mock_client = MagicMock()
+        good_resp = MagicMock()
+        good_resp.choices = [MagicMock()]
+        good_resp.choices[0].message.content = "ok after retry"
+        good_resp.usage = None
+        mock_client.chat.completions.create.side_effect = [TimeoutError("stalled"), good_resp]
+
+        out = chat_completion(mock_client, "deepseek-chat", "sys", "usr")
+        self.assertEqual(out, "ok after retry")
+        self.assertEqual(mock_client.chat.completions.create.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

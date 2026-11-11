@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
+from openai import APIConnectionError, APITimeoutError, InternalServerError, OpenAI
 
 # Load .env file automatically if present (never committed to git)
 try:
@@ -211,7 +211,11 @@ def extract_json(raw: str) -> Any:
     raise json.JSONDecodeError("No valid JSON found in response", text, 0)
 
 
-def get_client(base_url: str | None = None, api_key: str | None = None) -> OpenAI:
+def get_client(
+    base_url: str | None = None,
+    api_key: str | None = None,
+    timeout: float | None = None,
+) -> OpenAI:
     """
     Return an OpenAI-compatible client.
 
@@ -229,7 +233,16 @@ def get_client(base_url: str | None = None, api_key: str | None = None) -> OpenA
     resolved_url = base_url or os.getenv(
         "LLM_BASE_URL", "https://api.deepseek.com"
     )
-    return OpenAI(api_key=resolved_key, base_url=resolved_url)
+    resolved_timeout = float(
+        timeout if timeout is not None else os.getenv("LLM_TIMEOUT_SECONDS", "120")
+    )
+    # Disable hidden SDK hangs (default is 600s) in favor of bounded timeout + explicit retry below.
+    return OpenAI(
+        api_key=resolved_key,
+        base_url=resolved_url,
+        timeout=resolved_timeout,
+        max_retries=0,
+    )
 
 
 def chat_completion(
@@ -294,7 +307,20 @@ def chat_completion(
     ticker = threading.Thread(target=_heartbeat, daemon=True)
     ticker.start()
     try:
-        response = client.chat.completions.create(**call_kwargs)
+        max_attempts = 2
+        response = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = client.chat.completions.create(**call_kwargs)
+                break
+            except (APITimeoutError, TimeoutError, APIConnectionError, InternalServerError) as exc:
+                if attempt >= max_attempts:
+                    raise
+                print(
+                    f"   ⚠ [LLM] {resolved_model} attempt {attempt} failed "
+                    f"({type(exc).__name__}: {exc}); retrying once...",
+                    flush=True,
+                )
     finally:
         stop_ticker.set()
         ticker.join(timeout=0.2)
