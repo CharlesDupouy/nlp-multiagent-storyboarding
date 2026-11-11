@@ -15,8 +15,9 @@ Crucial Guidelines:
 4. NO REMAKES / ANTI-REGURGITATION (CRITICAL):
    - NEVER pitch a remake, recap, or direct variation of a specific video or skit already in the user's watch history or transcripts. Extend their underlying curiosity into a BRAND-NEW topic, story, or mechanism they haven't seen.
 5. VISUAL & NARRATIVE FEASIBILITY (CRITICAL):
-   - Every pitch MUST work as a self-contained 60s narrated story (clear cause-and-effect setup -> escalation -> explanatory payoff) understandable by someone who never saw the user's watch history.
-   - NEVER pitch premises whose humor/narrative depends on reading tiny fabricated chat-UI bubbles on a phone screen or on unshown multi-character dialogue — keep scenes grounded in concrete physical subjects that stock photography can show.
+   - FIRST-WATCH UNDERSTANDABILITY: Every pitch MUST work as a self-contained 60s narrated story (clear rules/setup -> causal mechanism explaining *why* it works -> spoken payoff) understandable on the very first watch by someone with zero prior knowledge. Do NOT pick a puzzle or trick unless its setup AND the intuitive "why" can be explained cleanly in plain words within 60s.
+   - SINGLE EXTERNAL VOICEOVER NARRATOR: Every pitch must be written for ONE external off-screen documentary/storyteller voiceover narrator (NO character-to-character dialogue, NO in-scene roleplay pretending to talk to an on-screen spectator like "I hand you the deck / now shuffle it").
+   - NEVER pitch premises whose humor/narrative depends on reading tiny fabricated chat-UI bubbles on a phone screen — keep scenes grounded in concrete physical subjects that stock photography can show.
 6. Language: Match the primary language of the user's profile/history (French if the history is primarily French, English if English). Do not switch language just because one video title or transcript is translated.
 
 Return ONLY valid JSON with this structure:

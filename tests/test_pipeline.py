@@ -1005,6 +1005,46 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(out, "ok after retry")
         self.assertEqual(mock_client.chat.completions.create.call_count, 2)
 
+    def test_first_watch_and_single_narrator_prompts(self):
+        from baseline.single_agent_baseline import _BASELINE_SYSTEM_PROMPT, _BASELINE_SYSTEM_PROMPT_DEFAULT
+        from src.agents.director_agent import _DIRECTOR_SYSTEM_PROMPT, _DIRECTOR_SYSTEM_PROMPT_DEFAULT
+        from src.agents.scriptwriter_agent import (
+            _DRAFT_SYSTEM_PROMPT,
+            _DRAFT_SYSTEM_PROMPT_DEFAULT,
+            _REFINE_SYSTEM_PROMPT,
+            _REFINE_SYSTEM_PROMPT_DEFAULT,
+            _build_draft_prompt,
+            _build_refine_prompt,
+        )
+        from src.agents.writers_room_agent import _WRITERS_ROOM_SYSTEM_PROMPT, _WRITERS_ROOM_SYSTEM_PROMPT_DEFAULT
+        from src.core.state import ImageContext, SharedState, Storyboard, UserProfile
+
+        pairs = [
+            ("writers_room.txt", _WRITERS_ROOM_SYSTEM_PROMPT, _WRITERS_ROOM_SYSTEM_PROMPT_DEFAULT, "SINGLE EXTERNAL VOICEOVER NARRATOR"),
+            ("director.txt", _DIRECTOR_SYSTEM_PROMPT, _DIRECTOR_SYSTEM_PROMPT_DEFAULT, "single external off-screen"),
+            ("scriptwriter_draft.txt", _DRAFT_SYSTEM_PROMPT, _DRAFT_SYSTEM_PROMPT_DEFAULT, "STRICTLY SINGLE EXTERNAL VOICEOVER NARRATOR"),
+            ("scriptwriter_refine.txt", _REFINE_SYSTEM_PROMPT, _REFINE_SYSTEM_PROMPT_DEFAULT, "STRICTLY SINGLE EXTERNAL VOICEOVER NARRATOR"),
+            ("baseline.txt", _BASELINE_SYSTEM_PROMPT, _BASELINE_SYSTEM_PROMPT_DEFAULT, "STRICTLY SINGLE EXTERNAL VOICEOVER NARRATOR"),
+        ]
+        repo_root = Path(__file__).resolve().parent.parent
+        for fname, loaded, default, marker in pairs:
+            self.assertEqual(loaded, (repo_root / "prompts" / fname).read_text(encoding="utf-8").strip())
+            for variant in (loaded, default):
+                self.assertIn(marker, variant)
+                self.assertNotIn("narrative dialogue", variant)
+                self.assertNotIn("voiceover dialogue", variant)
+
+        for p in (_WRITERS_ROOM_SYSTEM_PROMPT, _DRAFT_SYSTEM_PROMPT, _REFINE_SYSTEM_PROMPT, _BASELINE_SYSTEM_PROMPT):
+            self.assertIn("FIRST WATCH", p.upper().replace("-", " "))
+
+        st = SharedState(
+            user_profile=UserProfile(interests=["math"], themes=["logic"], raw_summary="Test"),
+            storyboard=Storyboard(title="T", scenes=[{"scene_id": 1, "description": "d", "voiceover": "v", "duration_seconds": 10}]),
+            image_context=ImageContext(images=[{"image_id": "img1", "alt_text": "paper", "query": "paper"}]),
+        )
+        self.assertIn("first watch", _build_draft_prompt(st, 60))
+        self.assertIn("external off-screen narrator", _build_refine_prompt(st))
+
 
 if __name__ == "__main__":
     unittest.main()

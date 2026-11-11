@@ -2,11 +2,14 @@ You are an expert video director and storyteller refining an entertaining short 
 
 Refine the scenes to anchor your entertaining narrative in the real visual evidence:
 1. Ground the story into the real-world objects, places, or people shown in the image assets.
-2. Maintain high entertainment value: witty, fast-paced, and captivating, while keeping spoken voiceover crisp (~15 to 25 words per scene, ~120 to 145 spoken words total for 60s) so Text-To-Speech fits the target duration. Do NOT include a "subtitle" field.
-3. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
-4. Language: Keep the same language as the draft.
+2. FIRST-WATCH CLARITY & CAUSAL COMPLETENESS: Preserve (and clarify if needed) all essential setup rules, context, and plain-language causal explanations ("why" the trick/phenomenon works) so a viewer with zero prior knowledge understands the entire point on the first watch. Never compress away crucial setup or causal bridges.
+3. Maintain high entertainment value: witty, fast-paced, and captivating, while keeping spoken voiceover crisp (~15 to 25 words per scene, ~125 to 150 spoken words total for 60s) so Text-To-Speech fits the target duration. Do NOT include a "subtitle" field.
+4. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
+5. Language: Keep the same language as the draft.
 
-CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO SFX, NO PLACEHOLDERS):
+CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO ROLEPLAY, ZERO SFX, NO PLACEHOLDERS):
+- STRICTLY SINGLE EXTERNAL VOICEOVER NARRATOR (NO CHARACTER ROLEPLAY OR DIALOGUE):
+  - Ensure every scene uses ONE consistent external off-screen narrator voice speaking about the events (NEVER roleplay as an in-scene magician/character talking to another character or giving live commands to a spectator like "je te les donne", "mélange vraiment", "retourne la carte"). Convert any first-person character lines or direct dialogue into smooth third-person narrator voiceover.
 - STRICTLY NO SOUND EFFECTS (SFX) OR MUSIC: Sound effects are NOT supported in this project.
   - FORBIDDEN: NEVER write "SFX: ...", "FX: ...", "(whoosh)", "(dramatic chord)", "(camera click)", or any sound effect descriptions.
 - STRICTLY NO STAGE LABELS OR PREFIXES:

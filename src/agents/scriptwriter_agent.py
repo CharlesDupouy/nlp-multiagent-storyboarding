@@ -174,7 +174,7 @@ TASK
 ====
 Draft a personalized short-video storyboard (target duration: {duration} seconds).
 Faithfully bring the commissioned pitch to life following the Director's notes and integrating the retrieved facts directly into the spoken voiceover.
-Ensure the narrative is 100% self-contained with a clear setup, progression, and spoken explanatory payoff (never assume text overlays or unspoken context).
+Ensure the narrative is 100% understandable on the very first watch: establish all rules/context cleanly up front, explain the causal "why" in plain words (no cryptic shorthand jumps), and write strictly as ONE external off-screen voiceover narrator (NO character roleplay, NO spectator dialogue).
 """
 
 
@@ -211,7 +211,8 @@ TASK
 Refine the storyboard scenes to visually ground them with the available assets:
 1. For each scene, assign the best fitting asset ID (e.g. "image_ref": "img1") or null if none fits.
 2. Slightly tweak the visual description and voiceover if needed to match what is depicted in the chosen image asset.
-3. Keep scene pacing (~15-25 spoken words per scene, ~120-145 words total for 60s) and target duration consistent.
+3. Preserve (and clarify if any step feels rushed) complete first-watch setup/rules and causal explanation ("why" it works).
+4. Enforce ONE consistent external off-screen narrator voiceover across all scenes (eliminate any character roleplay, spectator commands, or dialogue). Keep scene pacing (~15-25 spoken words per scene, ~125-150 words total for 60s) and target duration consistent.
 """
 
 
@@ -233,14 +234,21 @@ Core Philosophy:
 - Faithfully execute the commissioned story pitch and directorial guidance.
 - Adapt your voice and energy to match the commissioned tone (e.g., witty & comedic, mindbending curiosity, forensic mystery, chill craft, or high-stakes esports).
 - Ground the script using the retrieved real-world facts and evidence—never rely on hollow generic fluff.
-- STANDALONE CLARITY (CRITICAL): Write a 100% self-contained story understandable to someone who has NEVER seen the user's watch history. Every transition must follow clear cause-and-effect (always establish the setup/question before any twist — zero abrupt non-sequiturs).
+- STANDALONE CLARITY & FIRST-WATCH UNDERSTANDABILITY (CRITICAL): Write a 100% self-contained story completely understandable on the VERY FIRST WATCH to someone who has zero prior knowledge of the topic, riddle, or watch history.
+  - Setup & Rules FIRST: Always establish *who*, *what physical objects exist*, *the exact rules/constraints*, and *the stakes* in Scenes 1–2 BEFORE introducing twists, strategies, statistics, or academic names/dates (never open with unexplained paper citations before the premise makes sense).
+  - Explain the "WHY" (Zero Cryptic Jumps): Never state a punchline or mathematical rule as magic shorthand. Explicitly state in plain everyday terms *why* the mechanism produces that outcome (e.g., explain *why* following numbers forms closed loops before stating loop length, or *why* interleaving halves preserves relative order inside each half).
+  - Slideshow Format Awareness: Because the video renders as stock photos with a single AI voiceover (no live video acting or pausing), the spoken narration alone must carry every step smoothly from first word to last.
 - SHOWABLE PHYSICAL SCENES & SPOKEN PAYOFF: Ground visuals in real physical places/objects that stock photography can show (NEVER rely on viewers reading fabricated phone chat bubbles or on-screen text overlays). Deliver every crucial fact and the final explanatory payoff aloud in "voiceover".
 - Deliver an instant 3-second hook that halts the scroll.
 - Ensure narrative progression: each scene must reveal new information, escalate stakes, or provide visual contrast.
-- Voiceover & Pacing: Pure spoken narrative dialogue or voiceover lines only (NO SFX, NO music cues, NO stage labels). Keep speech concise so Text-To-Speech fits within the target duration: aim for ~15 to 25 spoken words per scene (~120 to 145 spoken words total across a 60s video; roughly 2 to 2.5 words per second of scene duration). Do NOT include an on-screen "subtitle" field.
+- Voiceover & Pacing: Pure single-narrator off-screen voiceover narration only (NEVER character dialogue, NEVER roleplay, NO SFX, NO music cues, NO stage labels). Keep speech concise yet complete enough to stay crystal clear so Text-To-Speech fits within the target duration: use 5 to 6 scenes (prefer 6 scenes whenever establishing setup rules + a causal explanation), aiming for ~15 to 25 spoken words per scene (~125 to 150 spoken words total across a 60s video). Do NOT include an on-screen "subtitle" field.
 - Language: Write the script in the primary language of the user's profile/history.
 
-CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO SFX, NO PLACEHOLDERS):
+CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO ROLEPLAY, ZERO SFX, NO PLACEHOLDERS):
+- STRICTLY SINGLE EXTERNAL VOICEOVER NARRATOR (NO CHARACTER ROLEPLAY OR DIALOGUE):
+  - Write the entire script from ONE consistent external off-screen documentary/explanatory narrator voice speaking about the subject.
+  - FORBIDDEN — IN-SCENE ROLEPLAY / SPECTATOR ADDRESS: NEVER write voiceover as a character inside the scene acting out props or talking to an imaginary spectator (e.g., FORBIDDEN: "D'abord je range les cartes... et je te les donne", "Maintenant mélange vraiment", "Retourne cette carte", "Tu seras pendu demain"). Instead narrate cleanly in third person (e.g., REQUIRED: "Le magicien prépare deux moitiés alternées, puis laisse un spectateur mélanger le jeu une seule fois.").
+  - FORBIDDEN — CHARACTER-TO-CHARACTER DIALOGUE OR SHIFTING FIRST-PERSON LINES: NEVER switch into first-person lines spoken by characters ("Si je suis vivant jeudi, alors..."). Use smooth third-person indirect narration throughout.
 - STRICTLY NO SOUND EFFECTS (SFX) OR MUSIC: Sound effects are NOT supported in this project.
   - FORBIDDEN: NEVER write "SFX: ...", "FX: ...", "(whoosh)", "(dramatic chord)", "(camera click)", or any sound effect descriptions.
 - STRICTLY NO STAGE LABELS OR PREFIXES:
@@ -276,11 +284,14 @@ You are an expert video director and storyteller refining an entertaining short 
 
 Refine the scenes to anchor your entertaining narrative in the real visual evidence:
 1. Ground the story into the real-world objects, places, or people shown in the image assets.
-2. Maintain high entertainment value: witty, fast-paced, and captivating, while keeping spoken voiceover crisp (~15 to 25 words per scene, ~120 to 145 spoken words total for 60s) so Text-To-Speech fits the target duration. Do NOT include a "subtitle" field.
-3. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
-4. Language: Keep the same language as the draft.
+2. FIRST-WATCH CLARITY & CAUSAL COMPLETENESS: Preserve (and clarify if needed) all essential setup rules, context, and plain-language causal explanations ("why" the trick/phenomenon works) so a viewer with zero prior knowledge understands the entire point on the first watch. Never compress away crucial setup or causal bridges.
+3. Maintain high entertainment value: witty, fast-paced, and captivating, while keeping spoken voiceover crisp (~15 to 25 words per scene, ~125 to 150 spoken words total for 60s) so Text-To-Speech fits the target duration. Do NOT include a "subtitle" field.
+4. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
+5. Language: Keep the same language as the draft.
 
-CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO SFX, NO PLACEHOLDERS):
+CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO ROLEPLAY, ZERO SFX, NO PLACEHOLDERS):
+- STRICTLY SINGLE EXTERNAL VOICEOVER NARRATOR (NO CHARACTER ROLEPLAY OR DIALOGUE):
+  - Ensure every scene uses ONE consistent external off-screen narrator voice speaking about the events (NEVER roleplay as an in-scene magician/character talking to another character or giving live commands to a spectator like "je te les donne", "mélange vraiment", "retourne la carte"). Convert any first-person character lines or direct dialogue into smooth third-person narrator voiceover.
 - STRICTLY NO SOUND EFFECTS (SFX) OR MUSIC: Sound effects are NOT supported in this project.
   - FORBIDDEN: NEVER write "SFX: ...", "FX: ...", "(whoosh)", "(dramatic chord)", "(camera click)", or any sound effect descriptions.
 - STRICTLY NO STAGE LABELS OR PREFIXES:

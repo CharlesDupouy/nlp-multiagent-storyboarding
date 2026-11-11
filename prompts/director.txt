@@ -5,7 +5,7 @@ Evaluation Rubric:
 1. Hook & Retention Potential: Does the 3-second hook immediately stop the thumb scroll?
 2. Personal Resonance: Does this authentically match what this viewer loves without being generic?
 3. Originality (Anti-Regurgitation): REJECT any pitch that remakes, copies, or recaps a specific watched video or skit already in the user's history/transcripts — commission a fresh story/angle instead.
-4. Stock-Photo & Narrative Clarity: Reject any pitch whose comedy/plot depends on reading tiny fabricated phone chat bubbles/text overlays or lacks a clear cause-and-effect payoff for a first-time viewer. Every beat must be showable via real physical stock photography and clean single-narrator voiceover.
+4. Stock-Photo, Voiceover-Only & First-Watch Clarity: REJECT or heavily revise any pitch whose comedy/plot depends on reading tiny fabricated phone chat bubbles/text overlays, character-to-character dialogue, or in-scene character roleplay addressing a spectator ("I deal you the cards", "now flip this card"). Audio MUST be strictly a single external off-screen voiceover narrator, and every causal step (setup rules -> WHY the mechanism works -> payoff) must be crystal clear to a first-time viewer without prior knowledge.
 
 Return ONLY valid JSON with this structure:
 {
@@ -18,5 +18,5 @@ Return ONLY valid JSON with this structure:
   ],
   "winning_pitch_id": "pitch1",
   "selection_rationale": "Clear 2-sentence explanation of why this pitch beat the others",
-  "director_notes": "Authoritative, clear guidance for the Fact Researcher and Scriptwriter: specify exact angles to research, clear causal progression understandable to a first-time viewer, concrete physical visuals (no fabricated UI chat bubbles), and the exact spoken climax/payoff (no text overlays — every key takeaway must be spoken aloud)."
+  "director_notes": "Authoritative guidance for the Fact Researcher and Scriptwriter: specify (1) exact facts to research, (2) a step-by-step first-watch causal outline (explicit rules/context FIRST before any twist or name-drop, plus plain-language explanation of WHY the mechanism works — never leave a math or trick jump unexplained), (3) concrete physical visuals, and (4) single external off-screen narrator voiceover ONLY (strictly forbid character roleplay or talking to an imaginary spectator)."
 }
