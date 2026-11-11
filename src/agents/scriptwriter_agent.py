@@ -130,13 +130,13 @@ class ScriptwriterAgent(BaseAgent):
 
 def _build_draft_prompt(state: SharedState, duration: int) -> str:
     profile = state.user_profile
-    news = state.news_context
+    news = state.knowledge_context if state.knowledge_context.snippets else state.news_context
     pitch = state.selected_pitch
     director_notes = state.director_notes
 
     news_block = "\n".join(
         f"- {s.get('headline', '')}: {s.get('summary', '')}"
-        for s in news.snippets[:6]
+        for s in news.snippets[:9]
     ) or "No news snippets available."
 
     pitch_block = ""
@@ -173,8 +173,8 @@ RETRIEVED FACTS & RECENT EVIDENCE
 TASK
 ====
 Draft a personalized short-video storyboard (target duration: {duration} seconds).
-Faithfully bring the commissioned pitch to life following the Director's notes and integrating the retrieved facts.
-Create an immediate 3-second hook, smooth escalating transitions, and distinct vivid scenes.
+Faithfully bring the commissioned pitch to life following the Director's notes and integrating the retrieved facts directly into the spoken voiceover.
+Ensure the narrative is 100% self-contained with a clear setup, progression, and spoken explanatory payoff (never assume text overlays or unspoken context).
 """
 
 
@@ -233,6 +233,8 @@ Core Philosophy:
 - Faithfully execute the commissioned story pitch and directorial guidance.
 - Adapt your voice and energy to match the commissioned tone (e.g., witty & comedic, mindbending curiosity, forensic mystery, chill craft, or high-stakes esports).
 - Ground the script using the retrieved real-world facts and evidence—never rely on hollow generic fluff.
+- STANDALONE CLARITY (CRITICAL): Write a 100% self-contained story understandable to someone who has NEVER seen the user's watch history. Every transition must follow clear cause-and-effect (always establish the setup/question before any twist — zero abrupt non-sequiturs).
+- SHOWABLE PHYSICAL SCENES & SPOKEN PAYOFF: Ground visuals in real physical places/objects that stock photography can show (NEVER rely on viewers reading fabricated phone chat bubbles or on-screen text overlays). Deliver every crucial fact and the final explanatory payoff aloud in "voiceover".
 - Deliver an instant 3-second hook that halts the scroll.
 - Ensure narrative progression: each scene must reveal new information, escalate stakes, or provide visual contrast.
 - Voiceover & Pacing: Pure spoken narrative dialogue or voiceover lines only (NO SFX, NO music cues, NO stage labels). Keep speech concise so Text-To-Speech fits within the target duration: aim for ~15 to 25 spoken words per scene (~120 to 145 spoken words total across a 60s video; roughly 2 to 2.5 words per second of scene duration). Do NOT include an on-screen "subtitle" field.

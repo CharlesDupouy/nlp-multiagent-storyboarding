@@ -100,7 +100,7 @@ Brainstorm {self.num_queries} specific, compelling search queries across news, l
             self._log(state, f"  - [{rq.get('domain', 'auto')}] '{rq.get('query')}' ({rq.get('rationale', '')})")
 
         # 2. Multi-Tiered Tool Execution Pass
-        all_snippets: list[dict[str, str]] = []
+        per_query_results: list[list[dict[str, str]]] = []
         total_q = len(research_queries)
         for q_idx, rq in enumerate(research_queries, 1):
             q = rq.get("query", "")
@@ -115,9 +115,26 @@ Brainstorm {self.num_queries} specific, compelling search queries across news, l
             )
             sample_hl = results[0].get("headline", "")[:70] if results else "None"
             self._log(state, f"  -> Found {len(results)} snippet(s)" + (f" (top: '{sample_hl}')" if results else ""))
-            all_snippets.extend(results)
+            per_query_results.append(results)
 
-        state.knowledge_context = KnowledgeContext(snippets=all_snippets)
+        # Round-robin interleave across queries + deduplicate so downstream slicing gets diverse evidence
+        all_snippets: list[dict[str, str]] = []
+        seen_headlines: set[str] = set()
+        max_len = max((len(r) for r in per_query_results), default=0)
+        for i in range(max_len):
+            for bucket in per_query_results:
+                if i < len(bucket):
+                    item = bucket[i]
+                    key = str(item.get("headline", "")).strip().lower()
+                    if key and key in seen_headlines:
+                        continue
+                    if key:
+                        seen_headlines.add(key)
+                    all_snippets.append(item)
+
+        ctx = KnowledgeContext(snippets=all_snippets)
+        state.knowledge_context = ctx
+        state.news_context = ctx
         self._log(state, f"Retrieved {len(all_snippets)} verified knowledge/news snippets across {len(research_queries)} topics.")
         return state
 

@@ -32,23 +32,66 @@ def extract_video_id(url_or_id: str) -> str:
     return cleaned
 
 
-def get_video_transcript(url_or_id: str, max_chars: int = 1500) -> str | None:
+_FR_HINT_WORDS = {
+    "le", "la", "les", "un", "une", "des", "du", "de", "et", "est", "pour",
+    "avec", "qui", "que", "ce", "cette", "dans", "sur", "pas", "plus", "pourquoi",
+    "comment", "quand", "tout", "tous", "mon", "ton", "son", "mes", "tes", "ses",
+    "faire", "fait", "humour", "drole", "drôle", "vrai", "vraiment", "jamais",
+}
+_EN_HINT_WORDS = {
+    "the", "a", "an", "and", "is", "are", "was", "were", "this", "that",
+    "with", "for", "to", "in", "on", "of", "you", "your", "it", "they",
+    "how", "why", "what", "when", "who", "secret", "never", "always",
+}
+
+
+def detect_text_language(text: str, default: str = "en") -> str:
+    """Detect whether a short title/history block is predominantly French ('fr') or English ('en')."""
+    if not text:
+        return default
+    lowered = text.lower()
+    words = set(re.findall(r"\b[a-z\u00c0-\u017f]+\b", lowered))
+    fr_hits = len(words & _FR_HINT_WORDS) + len(re.findall(r"[éèêëàâùûîïôçœ]", lowered))
+    en_hits = len(words & _EN_HINT_WORDS)
+    if fr_hits > en_hits:
+        return "fr"
+    if en_hits > fr_hits:
+        return "en"
+    return default
+
+
+def get_video_transcript(
+    url_or_id: str,
+    max_chars: int = 1500,
+    languages: list[str] | tuple[str, ...] | None = None,
+) -> str | None:
     """
     Fetch the spoken transcript/subtitles for a YouTube video.
-    Returns cleaned dialogue text, or None if no captions are available.
+    Tries preferred `languages` (e.g. ['fr', 'en'] for French titles) before falling back
+    to any available transcript track, returning None if no captions exist.
     """
     if not _TRANSCRIPT_AVAILABLE:
         return None
 
     video_id = extract_video_id(url_or_id)
+    pref_langs = list(languages) if languages else ["en", "fr", "es", "de", "it"]
     try:
         api = YouTubeTranscriptApi()
-        # In youtube-transcript-api v1.2+, api.fetch() retrieves the transcript
+        records = None
         if hasattr(api, "fetch"):
-            records = api.fetch(video_id)
+            try:
+                records = api.fetch(video_id, languages=pref_langs)
+            except Exception:
+                if hasattr(api, "list"):
+                    tlist = api.list(video_id)
+                    first_track = next(iter(tlist), None)
+                    if first_track is not None:
+                        records = first_track.fetch()
         else:
-            records = YouTubeTranscriptApi.get_transcript(video_id)
+            records = YouTubeTranscriptApi.get_transcript(video_id, languages=pref_langs)
 
+        if not records:
+            return None
         lines = [r.text if hasattr(r, "text") else r.get("text", "") for r in records]
         full_text = " ".join(lines).strip()
         # Clean double spaces and linebreaks

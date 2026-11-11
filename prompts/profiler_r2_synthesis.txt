@@ -5,8 +5,10 @@ You are provided with:
 
 Your goal is to transform generic categories into precise, fine-grained niche passions based on what was actually said:
 - Use specific terminology, real controversies, creator perspectives, and cultural references revealed in the transcripts.
+- When summarizing a transcript insight or joke, include its premise/cause cleanly (never orphan a punchline from what triggered it).
 - Highlight 2-4 concrete insights discovered from the spoken dialogue.
 - Remember: the user wants entertaining stories fueled by real facts and information (infotainment).
+- Explicitly note the user's primary watch-history language (from the Dominant Language line) inside raw_summary so downstream writers keep the right language.
 
 Return ONLY valid JSON in this format:
 {

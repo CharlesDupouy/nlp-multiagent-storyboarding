@@ -26,7 +26,7 @@ from openai import OpenAI
 from src.agents.base_agent import BaseAgent
 from src.core.llm_client import chat_completion, extract_json, load_prompt
 from src.core.state import SharedState, UserProfile
-from src.tools.youtube_tool import get_video_transcript, get_video_metadata
+from src.tools.youtube_tool import get_video_transcript, get_video_metadata, detect_text_language
 
 
 class ProfilerAgent(BaseAgent):
@@ -87,6 +87,10 @@ Analyze this user's overall tastes and select up to {self.max_investigate} speci
         if r1_data.get("preliminary_themes"):
             self._log(state, f"  Preliminary themes: {', '.join(str(t) for t in r1_data.get('preliminary_themes', [])[:5])}")
 
+        # Detect dominant watch-history language so transcripts prefer native captions
+        all_titles_text = " ".join(v.get("title", "") for v in videos)
+        history_lang = detect_text_language(all_titles_text, default="en")
+
         # -------------------------------------------------------------------
         # TOOL EXECUTION: Fetch Spoken Transcripts & Metadata
         # -------------------------------------------------------------------
@@ -103,7 +107,12 @@ Analyze this user's overall tastes and select up to {self.max_investigate} speci
             title = video_info.get("title", "")
             self._log(state, f"Investigating ({idx_t}/{len(investigate_targets[:self.max_investigate])}) [{vid_id}] '{title[:40]}...' -> Reason: {reason}")
 
-            transcript = get_video_transcript(url, max_chars=1200)
+            vid_lang = detect_text_language(title, default=history_lang)
+            pref_langs = ["fr", "en"] if vid_lang == "fr" else ["en", "fr"]
+            try:
+                transcript = get_video_transcript(url, max_chars=1200, languages=pref_langs)
+            except TypeError:
+                transcript = get_video_transcript(url, max_chars=1200)
             meta = get_video_metadata(url)
             channel = meta.get("author", "") or "Unknown"
             tr_status = f"✓ Transcript ({len(transcript)} chars)" if transcript else "✗ No subtitles"
@@ -133,9 +142,12 @@ Analyze this user's overall tastes and select up to {self.max_investigate} speci
             )
         evidence_text = "\n".join(evidence_blocks)
 
+        lang_label = "French" if history_lang == "fr" else "English"
         user_prompt_r2 = f"""\
 ROUND 1 PRELIMINARY THEMES:
 {json.dumps(r1_data.get('preliminary_themes', []), ensure_ascii=False)}
+
+DOMINANT WATCH HISTORY LANGUAGE: {lang_label} (prefer {lang_label} when generating the final script unless all history items are in another language)
 
 INVESTIGATED VIDEO SPOKEN TRANSCRIPTS:
 {evidence_text}
@@ -219,8 +231,10 @@ You are provided with:
 
 Your goal is to transform generic categories into precise, fine-grained niche passions based on what was actually said:
 - Use specific terminology, real controversies, creator perspectives, and cultural references revealed in the transcripts.
+- When summarizing a transcript insight or joke, include its premise/cause cleanly (never orphan a punchline from what triggered it).
 - Highlight 2-4 concrete insights discovered from the spoken dialogue.
 - Remember: the user wants entertaining stories fueled by real facts and information (infotainment).
+- Explicitly note the user's primary watch-history language (from the Dominant Language line) inside raw_summary so downstream writers keep the right language.
 
 Return ONLY valid JSON in this format:
 {

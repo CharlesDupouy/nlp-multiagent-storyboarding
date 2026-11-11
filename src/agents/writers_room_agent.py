@@ -110,7 +110,12 @@ Crucial Guidelines:
    - Pitch 2: Explores a second distinct passion or transcript insight.
    - Pitch 3: A creative cross-over or surprising angle they wouldn't expect.
 3. Every pitch MUST have an instant 3-second hook that stops the scroll.
-4. Language: Match the primary language of the user's profile/history (e.g. French if French, English if English).
+4. NO REMAKES / ANTI-REGURGITATION (CRITICAL):
+   - NEVER pitch a remake, recap, or direct variation of a specific video or skit already in the user's watch history or transcripts. Extend their underlying curiosity into a BRAND-NEW topic, story, or mechanism they haven't seen.
+5. VISUAL & NARRATIVE FEASIBILITY (CRITICAL):
+   - Every pitch MUST work as a self-contained 60s narrated story (clear cause-and-effect setup -> escalation -> explanatory payoff) understandable by someone who never saw the user's watch history.
+   - NEVER pitch premises whose humor/narrative depends on reading tiny fabricated chat-UI bubbles on a phone screen or on unshown multi-character dialogue — keep scenes grounded in concrete physical subjects that stock photography can show.
+6. Language: Match the primary language of the user's profile/history (French if the history is primarily French, English if English). Do not switch language just because one video title or transcript is translated.
 
 Return ONLY valid JSON with this structure:
 {

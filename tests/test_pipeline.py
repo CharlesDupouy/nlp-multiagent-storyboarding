@@ -843,6 +843,50 @@ class TestPipeline(unittest.TestCase):
         judged_view = render_storyboard({"storyboard": {"title": "Clean Video", "overall_narrative": "Arc", "scenes": st.storyboard.scenes}})
         self.assertNotIn("Subtitle:", judged_view)
 
+    def test_language_aware_transcript_and_round_robin_snippets(self):
+        from unittest.mock import MagicMock, patch
+        from src.tools.youtube_tool import detect_text_language
+        from src.agents.writers_room_agent import _WRITERS_ROOM_SYSTEM_PROMPT
+        from src.agents.director_agent import _DIRECTOR_SYSTEM_PROMPT
+        from src.agents.scriptwriter_agent import _DRAFT_SYSTEM_PROMPT, _build_draft_prompt
+        from src.agents.knowledge_retriever_agent import KnowledgeRetrieverAgent
+        from src.core.state import KnowledgeContext, SharedState, UserProfile
+
+        # Language detection distinguishes French vs English watch history items cleanly
+        self.assertEqual(detect_text_language("POV : l'IA du site veut absolument te faire croire que c'est un humain"), "fr")
+        self.assertEqual(detect_text_language("The Secret To Crispy Chicken Is Water?"), "en")
+
+        # Anti-regurgitation & standalone clarity rules present in ideation/drafting prompts
+        self.assertIn("ANTI-REGURGITATION", _WRITERS_ROOM_SYSTEM_PROMPT)
+        self.assertIn("Anti-Regurgitation", _DIRECTOR_SYSTEM_PROMPT)
+        self.assertIn("STANDALONE CLARITY", _DRAFT_SYSTEM_PROMPT)
+
+        # Round-robin snippet interleaving gives query 2 & 3 equal priority in top-6/9 slices
+        mock_client = MagicMock()
+        r_queries = MagicMock()
+        r_queries.choices = [MagicMock()]
+        r_queries.choices[0].message.content = '{"queries": [{"query": "q1", "domain": "news"}, {"query": "q2", "domain": "technical"}, {"query": "q3", "domain": "encyclopedia"}]}'
+        r_queries.usage = None
+        mock_client.chat.completions.create.return_value = r_queries
+
+        st = SharedState(
+            user_profile=UserProfile(interests=["math"], themes=["logic"], raw_summary="Test"),
+            selected_pitch={"title": "Test Pitch", "target_tone": "curious", "concept": "c", "hook_3s": "h"},
+        )
+        agent = KnowledgeRetrieverAgent(model="deepseek-chat", client=mock_client, max_results=3, num_queries=3)
+
+        def fake_search(query, domain, max_results, client, model):
+            return [{"headline": f"{query}_{i}", "summary": f"fact {query} {i}", "url": "https://ex.com"} for i in range(3)]
+
+        with patch("src.agents.knowledge_retriever_agent.search_knowledge", side_effect=fake_search):
+            st = agent.run(st)
+
+        top_headlines = [s["headline"] for s in st.knowledge_context.snippets[:3]]
+        self.assertEqual(top_headlines, ["q1_0", "q2_0", "q3_0"])
+        draft_prompt = _build_draft_prompt(st, 60)
+        for h in top_headlines:
+            self.assertIn(h, draft_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

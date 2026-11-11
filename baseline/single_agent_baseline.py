@@ -190,8 +190,8 @@ Your task is to generate a high-quality, engaging, personalized 60-second short-
 
 Guidelines:
 - Analyze the user's watch history to understand their core interests, passions, and curiosity themes.
-- Select a single, focused, and compelling concept that deeply resonates with those interests (do not create an unfocused mashup of random channels).
-- Craft a cohesive 60-second narrative arc with an attention-grabbing hook, clear progression, and a memorable conclusion.
+- Select a single, focused, and compelling concept that deeply resonates with those interests (do not create an unfocused mashup of random channels, and do not merely remake/retell a watched video — extend their interests into a fresh, original story or angle).
+- Craft a cohesive, self-contained 60-second narrative arc with an attention-grabbing hook, clear cause-and-effect progression, and a spoken explanatory conclusion (understandable without seeing the user's history; never depend on reading chat-UI bubbles or on-screen text overlays).
 - Scenes: Provide vivid visual descriptions, English stock-photo search keywords, and pure spoken voiceover dialogue (NO on-screen subtitles, NO stage directions, NO SFX or music cues).
 - Timing & Voiceover Pacing: Aim for 4 to 6 scenes summing strictly to the target duration (e.g., 60 seconds). Keep voiceover crisp so Text-To-Speech actually fits within the duration: target ~15 to 25 spoken words per scene (~120 to 145 spoken words total across the entire 60s script; roughly 2 to 2.5 words per second of scene duration).
 - Image Queries (ALWAYS ENGLISH): ALWAYS write "image_query" in ENGLISH (2 to 4 concrete physical nouns/adjectives, e.g. "white folded paper wooden desk") EVEN IF the script, title, or watch history is French or another language.
