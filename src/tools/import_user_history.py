@@ -52,6 +52,19 @@ def parse_args() -> argparse.Namespace:
         help="Skip automatic title resolution via YouTube public oEmbed API.",
     )
     parser.add_argument(
+        "--force-enrich",
+        action="store_true",
+        help="Force re-fetching all titles from YouTube oEmbed API even if titles already exist.",
+    )
+    parser.add_argument(
+        "--cap",
+        "--max-videos",
+        type=int,
+        default=None,
+        dest="cap",
+        help="Maximum number of videos to retain (e.g. 90 for 3x30 split). Applied before splitting.",
+    )
+    parser.add_argument(
         "--split",
         "-s",
         type=int,
@@ -79,13 +92,35 @@ def sanitize_username(name: str) -> str:
     return cleaned or "anonymous_user"
 
 
-def enrich_single_video(video: dict[str, str]) -> dict[str, str]:
+GENERIC_DATE_HEADERS = {
+    "today", "yesterday", "tomorrow",
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "aujourd'hui", "hier", "demain",
+    "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+}
+
+
+def is_generic_title(title: str) -> bool:
+    """Identify placeholder titles or date headers that need oEmbed enrichment."""
+    if not title:
+        return True
+    t = title.strip().lower()
+    if "youtube short" in t:
+        return True
+    if t in GENERIC_DATE_HEADERS:
+        return True
+    if re.match(r"^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d+[\s\-/])", t):
+        return True
+    return False
+
+
+def enrich_single_video(video: dict[str, str], force: bool = False) -> dict[str, str]:
     """Fetch accurate video title and channel name via YouTube's public oEmbed API."""
     url = video.get("url", "")
     title = video.get("title", "")
 
-    # Only fetch if title is generic or missing
-    if "YouTube Short (" in title or title.startswith("YouTube Short #") or not title:
+    # Only fetch if forced or title is generic/missing
+    if force or is_generic_title(title):
         try:
             resp = requests.get(
                 f"https://www.youtube.com/oembed?url={url}&format=json",
@@ -102,22 +137,22 @@ def enrich_single_video(video: dict[str, str]) -> dict[str, str]:
     return video
 
 
-def enrich_titles_in_parallel(videos: list[dict[str, str]], max_workers: int = 15) -> list[dict[str, str]]:
+def enrich_titles_in_parallel(videos: list[dict[str, str]], force: bool = False, max_workers: int = 15) -> list[dict[str, str]]:
     """Enrich all video titles concurrently."""
     needs_enrichment = sum(
         1 for v in videos
-        if "YouTube Short (" in v.get("title", "") or v.get("title", "").startswith("YouTube Short #") or not v.get("title")
+        if force or is_generic_title(v.get("title", ""))
     )
     if needs_enrichment == 0:
         return videos
 
     print(f"🔄 Resolving real titles for {needs_enrichment} shorts via YouTube public API...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        enriched = list(executor.map(enrich_single_video, videos))
+        enriched = list(executor.map(lambda v: enrich_single_video(v, force=force), videos))
 
     resolved = sum(
         1 for v in enriched
-        if "YouTube Short (" not in v.get("title", "") and not v.get("title", "").startswith("YouTube Short #")
+        if not is_generic_title(v.get("title", ""))
     )
     print(f"✅ Resolved {resolved}/{len(videos)} real video titles!")
     return enriched
@@ -207,10 +242,14 @@ def main() -> None:
     try:
         videos = validate_and_clean_history(raw_data)
         if not args.no_enrich:
-            videos = enrich_titles_in_parallel(videos)
+            videos = enrich_titles_in_parallel(videos, force=args.force_enrich)
     except ValueError as e:
         print(f"❌ Validation failed: {e}", file=sys.stderr)
         sys.exit(1)
+
+    if args.cap and len(videos) > args.cap:
+        print(f"✂️  Capping history from {len(videos)} to {args.cap} most recent videos.")
+        videos = videos[:args.cap]
 
     user_slug = sanitize_username(args.user)
     out_dir = Path(args.output_dir)
