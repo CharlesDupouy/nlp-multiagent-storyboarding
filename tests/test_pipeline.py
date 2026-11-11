@@ -679,6 +679,42 @@ class TestPipeline(unittest.TestCase):
             self.assertIn("img=img1", out)
             self.assertTrue(Path(state.output_json_path).exists())
 
+    def test_video_frame_shows_visual_description_below_image(self):
+        from PIL import Image
+        import storyboard_to_video as s2v
+
+        src_img = Image.new("RGB", (600, 400), (220, 40, 40))
+        scene = {
+            "scene_id": 2,
+            "description": "Gros plan sur un marteau de bois posé sur une table sombre.",
+            "subtitle": "NE DOIT PAS APPARAITRE",
+            "voiceover": "Dix-huit mois ferme.",
+        }
+        frame = s2v.render_scene_frame(src_img, scene, (1280, 720), lang="fr")
+        self.assertEqual(frame.size, (1280, 720))
+
+        # Top area contains the fitted image (red pixel near upper center)
+        top_center = frame.getpixel((640, 260))
+        self.assertGreater(top_center[0], 180)
+        self.assertLess(top_center[1], 80)
+
+        # Bottom description panel (y >= 519) is dark slate (#141824) with bright text pixels, not red photo
+        bottom_bg_vals = [frame.getpixel((10, 620))]
+        self.assertLess(bottom_bg_vals[0][0], 40)
+
+        panel_crop = frame.crop((0, 520, 1280, 720))
+        bright_pixels = sum(1 for r, g, b in panel_crop.getdata() if r > 150 or b > 180)
+        self.assertGreater(bright_pixels, 500)
+
+        # Changing subtitle must not alter rendered frame pixels (subtitles omitted from video)
+        scene_alt_sub = dict(scene, subtitle="COMPLETELY DIFFERENT SUBTITLE TEXT")
+        frame_alt_sub = s2v.render_scene_frame(src_img, scene_alt_sub, (1280, 720), lang="fr")
+        self.assertEqual(frame.tobytes(), frame_alt_sub.tobytes())
+
+        # Missing image renders clean placeholder + visual description frame without crashing
+        ph_frame = s2v.render_scene_frame(None, scene, (1280, 720), lang="en")
+        self.assertEqual(ph_frame.size, (1280, 720))
+
 
 if __name__ == "__main__":
     unittest.main()

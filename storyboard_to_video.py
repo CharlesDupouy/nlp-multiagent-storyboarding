@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 storyboard_to_video.py
-Turn a storyboard JSON file into a slideshow video sketch with burned-in
-subtitles and neural Edge-TTS voiceover.
+Turn a storyboard JSON file into a slideshow video sketch with the AI visual
+description displayed below each scene image and neural Edge-TTS voiceover.
 
 Usage:
     python storyboard_to_video.py storyboard.json -o out.mp4
@@ -134,10 +134,22 @@ def download_image(url, timeout=15):
         return None
 
 
-def get_font(size):
-    for name in ("DejaVuSans-Bold.ttf", "Arial Bold.ttf", "arialbd.ttf", "Arial.ttf",
-                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                 "/System/Library/Fonts/Supplemental/Arial Bold.ttf"):
+def get_font(size, bold=True):
+    if bold:
+        candidates = (
+            "DejaVuSans-Bold.ttf", "Arial Bold.ttf", "arialbd.ttf", "Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        )
+    else:
+        candidates = (
+            "DejaVuSans.ttf", "Arial.ttf", "arial.ttf", "DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+        )
+    for name in candidates:
         try:
             return ImageFont.truetype(name, size)
         except OSError:
@@ -159,51 +171,128 @@ def wrap_text(draw, text, font, max_width):
     return lines
 
 
-def make_placeholder(size, scene):
-    """Used when the image URL is missing or unreachable."""
+def get_visual_description(scene):
+    """Return the scene's AI visual description text."""
+    return (scene.get("description") or scene.get("visual_description") or "").strip()
+
+
+def make_placeholder(size, scene, lang="fr"):
+    """Used inside the upper image region when image_url is missing or unreachable."""
     w, h = size
-    img = Image.new("RGB", size, (28, 32, 48))
+    img = Image.new("RGB", size, (24, 28, 42))
     d = ImageDraw.Draw(img)
-    title_font, body_font = get_font(h // 12), get_font(h // 26)
-    d.text((w // 2, h * 0.28), f"Scène {scene.get('scene_id', '?')}", font=title_font,
-           fill=(230, 230, 240), anchor="mm")
-    desc = scene.get("description", "")[:220]
-    for i, line in enumerate(wrap_text(d, desc, body_font, w * 0.75)[:5]):
-        d.text((w // 2, h * 0.42 + i * h / 20), line, font=body_font,
-               fill=(160, 165, 185), anchor="mm")
+    sid = scene.get("scene_id", "?")
+    is_fr = str(lang).lower().startswith("fr")
+    title = f"Scène {sid}" if is_fr else f"Scene {sid}"
+    subtitle = "Image indisponible" if is_fr else "Image unavailable"
+    title_font = get_font(max(20, h // 10), bold=True)
+    sub_font = get_font(max(14, h // 18), bold=False)
+    d.rectangle((0, 0, w - 1, h - 1), outline=(45, 53, 72), width=2)
+    d.text((w // 2, int(h * 0.44)), title, font=title_font, fill=(230, 234, 244), anchor="mm")
+    d.text((w // 2, int(h * 0.58)), subtitle, font=sub_font, fill=(148, 158, 180), anchor="mm")
     return img
 
 
-def fit_image(img, size):
-    """Scale to fit inside size (no cropping) on a black background."""
+def fit_image(img, size, bg=(11, 13, 19)):
+    """Scale to fit inside size (no cropping) centered on a background color."""
     w, h = size
     img = img.copy()
     img.thumbnail((w, h), Image.LANCZOS)
-    canvas = Image.new("RGB", size, (0, 0, 0))
+    canvas = Image.new("RGB", size, bg)
     canvas.paste(img, ((w - img.width) // 2, (h - img.height) // 2))
     return canvas
 
 
-def burn_subtitle(img, text):
-    if not text:
-        return img
-    w, h = img.size
-    font = get_font(h // 18)
-    probe = ImageDraw.Draw(img)
-    lines = wrap_text(probe, text, font, w * 0.86)
-    line_h = int(font.size * 1.3)
-    box_h = line_h * len(lines) + 24
-    y0 = h - box_h - int(h * 0.05)
+def render_scene_frame(img, scene, size, lang="fr"):
+    """
+    Compose a scene frame with the scene image on top and the AI visual
+    description cleanly displayed in a dedicated panel underneath it.
+    """
+    w, h = size
+    is_fr = str(lang).lower().startswith("fr")
+    sid = scene.get("scene_id", "?")
+    desc = get_visual_description(scene)
 
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    od = ImageDraw.Draw(overlay)
-    od.rounded_rectangle((w * 0.05, y0, w * 0.95, y0 + box_h), radius=12, fill=(0, 0, 0, 175))
-    img = Image.alpha_composite(img.convert("RGBA"), overlay)
-    d = ImageDraw.Draw(img)
-    for i, line in enumerate(lines):
-        d.text((w / 2, y0 + 12 + i * line_h + line_h / 2), line, font=font,
-               fill=(255, 255, 255), anchor="mm")
-    return img.convert("RGB")
+    panel_h = max(150, int(h * 0.28))
+    img_area_h = h - panel_h
+    inner_pad = max(10, min(w, img_area_h) // 36)
+    box_w = max(64, w - 2 * inner_pad)
+    box_h = max(64, img_area_h - 2 * inner_pad)
+
+    canvas = Image.new("RGB", size, (11, 13, 19))
+
+    if img is not None:
+        fitted = img.copy()
+        fitted.thumbnail((box_w, box_h), Image.LANCZOS)
+        px = (w - fitted.width) // 2
+        py = (img_area_h - fitted.height) // 2
+        canvas.paste(fitted, (px, py))
+        d_top = ImageDraw.Draw(canvas)
+        d_top.rectangle(
+            (px - 1, py - 1, px + fitted.width, py + fitted.height),
+            outline=(36, 41, 56),
+            width=1,
+        )
+    else:
+        placeholder = make_placeholder((box_w, box_h), scene, lang=lang)
+        canvas.paste(placeholder, (inner_pad, inner_pad))
+
+    # Dedicated visual-description panel beneath the image area
+    d = ImageDraw.Draw(canvas)
+    d.rectangle((0, img_area_h, w, h), fill=(20, 24, 36))
+    d.line((0, img_area_h, w, img_area_h), fill=(45, 53, 72), width=2)
+
+    pad_x = max(28, int(w * 0.04))
+    pad_top = max(12, int(panel_h * 0.08))
+    pad_bot = max(10, int(panel_h * 0.07))
+    text_w = max(120, w - 2 * pad_x)
+
+    hdr_label = (
+        f"SCÈNE {sid}  •  DESCRIPTION VISUELLE"
+        if is_fr
+        else f"SCENE {sid}  •  VISUAL DESCRIPTION"
+    )
+    hdr_size = max(13, min(22, int(panel_h * 0.085)))
+    hdr_font = get_font(hdr_size, bold=True)
+    hdr_h = int(hdr_size * 1.4)
+    d.text((pad_x, img_area_h + pad_top), hdr_label, font=hdr_font, fill=(122, 162, 247))
+
+    body_text = desc or ("Aucune description visuelle." if is_fr else "No visual description provided.")
+    body_y0 = img_area_h + pad_top + hdr_h + max(4, int(panel_h * 0.03))
+    avail_body_h = max(24, h - pad_bot - body_y0)
+
+    max_font_sz = max(18, min(30, int(panel_h * 0.135)))
+    min_font_sz = 12
+
+    chosen_font = get_font(min_font_sz, bold=False)
+    chosen_lines = wrap_text(d, body_text, chosen_font, text_w)
+    chosen_line_h = int(min_font_sz * 1.32)
+
+    for font_sz in range(max_font_sz, min_font_sz - 1, -1):
+        cand_font = get_font(font_sz, bold=False)
+        cand_lines = wrap_text(d, body_text, cand_font, text_w)
+        cand_line_h = int(font_sz * 1.32)
+        if len(cand_lines) * cand_line_h <= avail_body_h:
+            chosen_font = cand_font
+            chosen_lines = cand_lines
+            chosen_line_h = cand_line_h
+            break
+
+    max_lines = max(1, avail_body_h // max(1, chosen_line_h))
+    if len(chosen_lines) > max_lines:
+        chosen_lines = chosen_lines[:max_lines]
+        if chosen_lines[-1] and not chosen_lines[-1].endswith("…"):
+            chosen_lines[-1] = chosen_lines[-1].rstrip(" .") + "…"
+
+    for i, line in enumerate(chosen_lines):
+        d.text(
+            (pad_x, body_y0 + i * chosen_line_h),
+            line,
+            font=chosen_font,
+            fill=(235, 239, 248),
+        )
+
+    return canvas
 
 
 # --------------------------------------------------------------------------- #
@@ -393,15 +482,16 @@ class TTS:
 # --------------------------------------------------------------------------- #
 # Build
 # --------------------------------------------------------------------------- #
-def build_scene_clip(scene, idx, tmp, tts, size, args):
+def build_scene_clip(scene, idx, tmp, tts, size, args, lang="fr"):
     sid = scene.get("scene_id", idx + 1)
-    print(f"Scene {sid}: {scene.get('subtitle', '')!r}")
+    desc = get_visual_description(scene)
+    preview = (desc[:80] + "...") if len(desc) > 80 else desc
+    print(f"Scene {sid}: {preview!r}")
 
-    # Image
+    # Image + visual description panel underneath
     img = download_image(scene["image_url"]) if scene.get("image_url") else None
-    img = fit_image(img, size) if img else make_placeholder(size, scene)
     frame = tmp / f"frame_{idx:03d}.png"
-    burn_subtitle(img, scene.get("subtitle", "")).save(frame)
+    render_scene_frame(img, scene, size, lang=lang).save(frame)
 
     # Speech
     cue = scene.get("voiceover") or scene.get("audio_cue", "")
@@ -439,7 +529,7 @@ def build_scene_clip(scene, idx, tmp, tts, size, args):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Storyboard JSON -> slideshow video with TTS")
+    ap = argparse.ArgumentParser(description="Storyboard JSON -> slideshow video with visual description panel & TTS")
     ap.add_argument("storyboard", help="path to the storyboard JSON")
     ap.add_argument("-o", "--output", default=None,
                     help="Output MP4 path. If omitted, automatically placed alongside the storyboard.")
@@ -498,7 +588,7 @@ def main():
 
     tmp = Path(tempfile.mkdtemp(prefix="storyboard_"))
     try:
-        clips = [build_scene_clip(s, i, tmp, tts, size, args) for i, s in enumerate(scenes)]
+        clips = [build_scene_clip(s, i, tmp, tts, size, args, lang=lang) for i, s in enumerate(scenes)]
 
         listing = tmp / "clips.txt"
         listing.write_text("".join(f"file '{c.as_posix()}'\n" for c in clips), encoding="utf-8")
