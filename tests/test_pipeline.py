@@ -1175,6 +1175,83 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(res.storyboard.scenes[5]["image_ref"], "img6")
         self.assertEqual(res.storyboard.scenes[5]["image_url"], "https://images.unsplash.com/photo-6")
 
+    def test_prepare_human_eval_packaging_and_csv_analysis(self):
+        """prepare_human_eval must create balanced blind packages and unblind Google Form CSV rows accurately."""
+        import csv
+        import tempfile
+        import zipfile
+        from pathlib import Path
+        from evaluation.prepare_human_eval import analyze_form_responses, package_human_eval
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            out_src = tmp_path / "outputs"
+            for part in ("part1", "part2", "part3"):
+                for mode in ("agentic", "baseline"):
+                    d = out_src / f"alice_{part}" / mode
+                    d.mkdir(parents=True)
+                    (d / f"{mode}_video_alice_{part}_20261111_120000.mp4").write_bytes(f"{mode}:{part}".encode())
+
+            pkg_dir = tmp_path / "packages"
+            manifest = package_human_eval(
+                outputs_dir=out_src,
+                out_dir=pkg_dir,
+                seed=7,
+                form_url="https://docs.google.com/forms/d/e/FAKE/viewform",
+                participant_entry="entry.999",
+                zip_packages=True,
+            )
+
+            self.assertIn("alice", manifest["participants"])
+            pairs = manifest["participants"]["alice"]["pairs"]
+            self.assertEqual(len(pairs), 3)
+            orders = {p["order"] for p in pairs}
+            # 3 pairs must contain both AB and BA orders (no all-same position bias)
+            self.assertEqual(orders, {"AB", "BA"})
+
+            alice_dir = pkg_dir / "alice"
+            guide_text = (alice_dir / "INSTRUCTIONS_EN_FR.md").read_text(encoding="utf-8")
+            self.assertIn("entry.999=alice", guide_text)
+            self.assertTrue((pkg_dir / "alice.zip").is_file())
+            with zipfile.ZipFile(pkg_dir / "alice.zip") as zf:
+                self.assertIn("alice/Pair1_VideoA.mp4", zf.namelist())
+                self.assertIn("alice/Pair3_VideoB.mp4", zf.namelist())
+
+            # Simulate Form CSV where alice picks Video A whenever A=agentic and Video B whenever B=agentic on Pairs 1-2, and Tie on Pair 3
+            csv_path = tmp_path / "responses.csv"
+            headers = ["Timestamp", "Participant ID"]
+            row = {"Timestamp": "2026-11-11 18:00:00", "Participant ID": "alice"}
+            for p in pairs:
+                k = p["pair_num"]
+                ag_slot = "A" if p["video_a_system"] == "agentic" else "B"
+                bl_slot = "B" if ag_slot == "A" else "A"
+                for slot, scores in ((ag_slot, (5, 5, 4, 5)), (bl_slot, (3, 2, 3, 2))):
+                    cols = [
+                        (f"Pair {k} — Video {slot}: Personal Relevance (1–5)", scores[0]),
+                        (f"Pair {k} — Video {slot}: Creativity (1–5)", scores[1]),
+                        (f"Pair {k} — Video {slot}: Engagement (1–5)", scores[2]),
+                        (f"Pair {k} — Video {slot}: Overall Preference (1–5)", scores[3]),
+                    ]
+                    for h, val in cols:
+                        headers.append(h)
+                        row[h] = str(val)
+                w_col = f"Pair {k} — Which video would you rather watch?"
+                headers.append(w_col)
+                row[w_col] = f"Video {ag_slot}" if k in (1, 2) else "No preference / Tie"
+
+            with csv_path.open("w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=headers)
+                writer.writeheader()
+                writer.writerow(row)
+
+            analysis = analyze_form_responses(csv_path=csv_path, key_path=pkg_dir / "blinding_key.json")
+            self.assertEqual(analysis["n_users"], 1)
+            self.assertEqual(analysis["n_pairs"], 3)
+            self.assertAlmostEqual(analysis["metrics"]["relevance"]["agentic_mean"], 5.0)
+            self.assertAlmostEqual(analysis["metrics"]["relevance"]["baseline_mean"], 3.0)
+            self.assertEqual(analysis["pairwise_votes"], {"agentic": 2, "baseline": 0, "tie": 1})
+            self.assertAlmostEqual(analysis["win_rate_excl_ties"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
