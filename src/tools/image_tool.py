@@ -1,9 +1,12 @@
 """
-image_tool.py — Tool wrapper for photographic image asset search.
+image_tool.py — Tool wrapper for photographic and web image asset search.
 
-Searches for high-resolution stock images by keyword without needing a vision model.
-Uses Unsplash API (when UNSPLASH_ACCESS_KEY is set) or Pexels API (when PEXELS_API_KEY is set),
-with intelligent stock query cleaning and candidate retrieval.
+Searches for high-resolution photographic/illustrative images by keyword without needing
+a vision model. Primary provider is Serper.dev Google Image Search (when SERPER_API_KEY
+is set or IMAGE_API_PROVIDER=serper): if Serper fails or finds no usable verified images,
+it returns [] cleanly so affected scenes omit images instead of failing over to other
+providers or mock placeholder URLs. Intelligent stock query cleaning, watermark/login-wall
+filtering, and URL reachability checks are applied to every candidate.
 """
 
 from __future__ import annotations
@@ -11,22 +14,94 @@ from __future__ import annotations
 import os
 import re
 from typing import Any
+from urllib.parse import urlparse
 import requests
 from dotenv import load_dotenv
 
 # Ensure environment variables are loaded
 load_dotenv()
 
-# Words that ruin stock photo search by injecting cinematography instructions instead of physical objects
+# Words that ruin stock/image search by injecting cinematography instructions instead of physical objects
 _BANNED_DIRECTIVES = re.compile(
     r'\b(macro|closeup|close-up|split screen|exploded view|cinematic|footage|4k|8k|'
     r'wide shot|establishing shot|drone shot|pov|2000s|vintage style|action shot)\b',
     re.IGNORECASE,
 )
 
+# Watermarked stock agencies, disguised stock CDNs, and bot-blocked social login walls
+_BLOCKED_IMAGE_DOMAINS: tuple[str, ...] = (
+    # Watermarked stock providers & proxy CDNs
+    "shutterstock.com",
+    "gettyimages.",
+    "alamy.com",
+    "istockphoto.com",
+    "dreamstime.com",
+    "123rf.com",
+    "depositphotos.com",
+    "vecteezy.com",
+    "stock.adobe.com",
+    "ftcdn.net",
+    "abposters.com",
+    "europosters.",
+    "plus.unsplash.com",
+    "classroomclipart.com",
+    "pond5.com",
+    "bigstockphoto.com",
+    "canstockphoto.com",
+    "dissolve.com",
+    "agefotostock.com",
+    "superstock.com",
+    "featurepics.com",
+    "colourbox.com",
+    "megapixl.com",
+    "panthermedia.net",
+    "storyblocks.com",
+    "pngtree.com",
+    "clipartkey.com",
+    "clipart-library.com",
+    # Walled-garden social media domains (return HTML login walls or HTTP 403 to video renderer)
+    "facebook.com",
+    "fbcdn.net",
+    "fbsbx.com",
+    "instagram.com",
+    "cdninstagram.com",
+    "tiktok.com",
+    "tiktokcdn.com",
+    "twitter.com",
+    "x.com",
+    "twimg.com",
+    "threads.net",
+)
+
+# Shopping/poster marketplaces demoted behind real photographic/editorial sources
+_LOW_PRIORITY_DOMAINS: tuple[str, ...] = (
+    "ebay.",
+    "etsy.",
+    "amazon.",
+    "walmart.",
+    "aliexpress.",
+    "temu.",
+    "poshmark.",
+    "mercari.",
+    "wayfair.",
+    "target.com",
+    "alibaba.com",
+    "pinterest.",
+)
+
+_NON_RASTER_EXTS = {".svg", ".tif", ".tiff", ".gif", ".pdf"}
+_DEFAULT_IMAGE_UA = (
+    "HKUST-NLP-Storyboarding/1.0 "
+    "(https://github.com/CharlesDupouy/nlp-multiagent-storyboarding)"
+)
+
 
 class UnsplashRateLimitError(RuntimeError):
     """Raised when Unsplash rejects a query with HTTP 403/429 rate-limit status."""
+
+
+class SerperSearchError(RuntimeError):
+    """Raised when Serper.dev rejects a query or fails over the network."""
 
 
 def clean_stock_query(query: str) -> str:
@@ -63,12 +138,36 @@ def search_image_candidates(
     Returns:
         List of dicts: {"candidate_id": str, "url": str, "description": str, "alt_text": str}
     """
-    provider = os.getenv("IMAGE_API_PROVIDER", "unsplash").lower()
+    serper_key = os.getenv("SERPER_API_KEY")
     unsplash_key = os.getenv("UNSPLASH_ACCESS_KEY")
     pexels_key = os.getenv("PEXELS_API_KEY")
+    default_provider = "unsplash" if (not serper_key and unsplash_key) else "serper"
+    provider = (os.getenv("IMAGE_API_PROVIDER") or default_provider).strip().lower()
 
     cleaned_primary = clean_stock_query(query)
     cleaned_fallback = clean_stock_query(fallback_query) if fallback_query else ""
+
+    if provider == "mock":
+        return _mock_search_images(query, max_results)
+
+    if provider == "serper":
+        if not serper_key:
+            print(f"[TOOL WARNING] SERPER_API_KEY is not set; returning no images for {query!r}.")
+            return []
+        try:
+            candidates = _serper_fetch_candidates(cleaned_primary, max_results, serper_key)
+            if candidates:
+                return candidates
+
+            if cleaned_fallback and cleaned_fallback != cleaned_primary:
+                candidates = _serper_fetch_candidates(cleaned_fallback, max_results, serper_key)
+                if candidates:
+                    return candidates
+        except SerperSearchError as e:
+            print(f"[TOOL WARNING] Serper unavailable — skipping image and fallback providers: {e}")
+        except Exception as e:
+            print(f"[TOOL WARNING] Serper candidate search error — skipping image and fallback providers: {e}")
+        return []
 
     if provider == "unsplash" and unsplash_key:
         try:
@@ -94,7 +193,7 @@ def search_image_candidates(
         except Exception as e:
             print(f"[TOOL WARNING] Unsplash candidate search error: {e}")
 
-    if (provider == "pexels" or (provider == "unsplash" and pexels_key)) and pexels_key:
+    if provider == "pexels" and pexels_key:
         try:
             candidates = _pexels_search(cleaned_primary, max_results, pexels_key)
             if candidates:
@@ -102,7 +201,7 @@ def search_image_candidates(
         except Exception as e:
             print(f"[TOOL WARNING] Pexels candidate search error: {e}")
 
-    # Fallback to mock images if API fails, rate-limits, or key is missing
+    # Fallback to mock images only for non-Serper providers if API fails, rate-limits, or key is missing
     return _mock_search_images(query, max_results)
 
 
@@ -118,6 +217,118 @@ def search_images(query: str, max_results: int = 3, per_page: int | None = None)
             "description": c.get("description", c.get("alt_text", "")),
         }
         for c in candidates
+    ]
+
+
+def _is_blocked_image_source(url: str, domain: str = "", source: str = "") -> bool:
+    """Return True for watermarked stock sites/CDNs and walled-garden social hosts."""
+    host = urlparse(url or "").netloc.lower()
+    haystack = " ".join(part.lower() for part in (host, domain or "", source or "", url or ""))
+    return any(marker in haystack for marker in _BLOCKED_IMAGE_DOMAINS)
+
+
+def _is_low_priority_domain(url: str, domain: str = "") -> bool:
+    """Return True for e-commerce/shopping domains that should sort after editorial photos."""
+    host = (domain or urlparse(url or "").netloc).lower()
+    return any(marker in host for marker in _LOW_PRIORITY_DOMAINS)
+
+
+def _is_fetchable_image_url(url: str, timeout: float = 3.5) -> bool:
+    """Quick streaming check ensuring URL responds 200 OK with raster image content."""
+    headers = {"User-Agent": os.getenv("WIKIMEDIA_USER_AGENT") or _DEFAULT_IMAGE_UA}
+    try:
+        with requests.get(url, headers=headers, timeout=timeout, stream=True, allow_redirects=True) as resp:
+            if resp.status_code != 200:
+                return False
+            ctype = (resp.headers.get("Content-Type") or "").lower()
+            if ctype.startswith("image/"):
+                return not any(bad in ctype for bad in ("svg", "tiff", "x-icon"))
+            # Fallback when CDN sends generic octet-stream or omits Content-Type
+            if not ctype or "octet-stream" in ctype:
+                head = next(resp.iter_content(chunk_size=16), b"")
+                return head.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF"))
+            return False
+    except Exception:
+        return False
+
+
+def _serper_fetch_candidates(
+    q: str,
+    max_results: int,
+    api_key: str,
+    verify_urls: bool = True,
+) -> list[dict[str, Any]]:
+    """Query Serper.dev Google Images and return filtered, fetchable candidates."""
+    if not q:
+        return []
+
+    url = "https://google.serper.dev/images"
+    headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
+    num_fetch = min(max(max_results * 5, 16), 20)
+    payload = {"q": q, "num": num_fetch, "gl": "us", "hl": "en"}
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=12)
+    if resp.status_code != 200:
+        detail = (resp.text or "").strip().replace("\n", " ")[:160]
+        raise SerperSearchError(f"HTTP {resp.status_code} for {q!r}: {detail}")
+
+    raw_images = resp.json().get("images", [])
+    seen_urls: set[str] = set()
+    normal_bucket: list[dict[str, Any]] = []
+    ecommerce_bucket: list[dict[str, Any]] = []
+    tiny_bucket: list[dict[str, Any]] = []
+
+    for item in raw_images:
+        img_url = (item.get("imageUrl") or "").strip()
+        if not img_url.lower().startswith(("http://", "https://")) or img_url in seen_urls:
+            continue
+        seen_urls.add(img_url)
+
+        path = urlparse(img_url).path.lower()
+        if any(path.endswith(ext) for ext in _NON_RASTER_EXTS):
+            continue
+
+        domain = (item.get("domain") or urlparse(img_url).netloc).lower().strip()
+        source = (item.get("source") or domain).strip()
+        if _is_blocked_image_source(img_url, domain, source):
+            continue
+
+        title = re.sub(r"\s+", " ", (item.get("title") or "").strip())
+        desc = title or f"Image of {q}"
+        alt_text = f"{desc} (Source: {source}, {domain})".strip() if source else desc
+        entry = {
+            "url": img_url,
+            "description": desc,
+            "alt_text": alt_text,
+            "photographer": source or "Web",
+        }
+
+        img_width = item.get("imageWidth")
+        if isinstance(img_width, (int, float)) and 0 < img_width < 320:
+            tiny_bucket.append(entry)
+        elif _is_low_priority_domain(img_url, domain):
+            ecommerce_bucket.append(entry)
+        else:
+            normal_bucket.append(entry)
+
+    ordered = normal_bucket + ecommerce_bucket + tiny_bucket
+    if not ordered:
+        return []
+
+    selected: list[dict[str, Any]] = []
+    if verify_urls:
+        max_checks = min(len(ordered), max(max_results * 3, 6))
+        for entry in ordered[:max_checks]:
+            if _is_fetchable_image_url(entry["url"]):
+                selected.append(entry)
+                if len(selected) >= max_results:
+                    break
+    else:
+        selected = ordered[:max_results]
+
+    return [
+        {"candidate_id": f"cand{idx + 1}", **entry}
+        for idx, entry in enumerate(selected)
     ]
 
 

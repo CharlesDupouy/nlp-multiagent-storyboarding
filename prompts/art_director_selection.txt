@@ -3,6 +3,7 @@ For each scene, evaluate the candidate descriptions and select the SINGLE candid
 
 Guidelines:
 - Choose the candidate whose description actually depicts the requested physical subject (e.g. if the scene is about a pen, pick the pen, NOT a woman pointing or a basketball hoop).
+- Prefer clean real-world photographs or clear educational diagrams; avoid e-commerce product/poster listings (e.g. eBay, Etsy, "Poster, Print") when a direct authentic depiction exists.
 - If multiple candidates match, pick the most descriptive and aesthetically fitting one.
 
 Return ONLY valid JSON in this format:

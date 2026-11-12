@@ -16,6 +16,7 @@ Requirements:
 import argparse
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -23,6 +24,7 @@ import sys
 import tempfile
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -91,16 +93,38 @@ def clean_audio_cue(cue, raw=False):
 # --------------------------------------------------------------------------- #
 # Images and frame rendering
 # --------------------------------------------------------------------------- #
+_PROJECT_USER_AGENT = (
+    "HKUST-NLP-Storyboarding/1.0 "
+    "(https://github.com/CharlesDupouy/nlp-multiagent-storyboarding)"
+)
+
+
 def download_image(url, timeout=15):
     try:
         if not url.lower().startswith(("http://", "https://")):   # local file path
             return Image.open(url.replace("file://", "")).convert("RGB")
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return Image.open(io.BytesIO(r.read())).convert("RGB")
     except Exception as e:
         print(f"  ! could not fetch image ({type(e).__name__}: {e}); using placeholder")
         return None
+
+    project_ua = os.getenv("WIKIMEDIA_USER_AGENT") or _PROJECT_USER_AGENT
+    host = urlparse(url).netloc.lower()
+    ua_candidates = (
+        [project_ua]
+        if host.endswith(("wikimedia.org", "wikipedia.org"))
+        else ["Mozilla/5.0", project_ua]
+    )
+
+    last_exc = None
+    for ua in ua_candidates:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": ua})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return Image.open(io.BytesIO(r.read())).convert("RGB")
+        except Exception as e:
+            last_exc = e
+    print(f"  ! could not fetch image ({type(last_exc).__name__}: {last_exc}); using placeholder")
+    return None
 
 
 def get_font(size, bold=True):

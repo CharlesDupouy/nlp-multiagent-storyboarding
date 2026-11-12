@@ -46,9 +46,9 @@ flowchart TD
     WR --> DIR["Phase 3: DirectorAgent (Showrunner)\nCritiques all 3 pitches, selects winner & issues production notes"]
     DIR --> K["Phase 4: KnowledgeRetrieverAgent (Targeted Research)\nMulti-tiered queries (Wikipedia + NewsAPI + LLM synthesis)"]
     K --> S1["Phase 5: ScriptwriterAgent (Draft Pass)\nDrafts 60s storyboard executing winning pitch + director guidance"]
-    S1 --> ART["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no cinematography fluff)\n2. Candidate retrieval (4 per scene via Unsplash API)\n3. Semantic re-ranking to select most representative photo"]
+    S1 --> ART["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no cinematography fluff)\n2. Candidate retrieval (4 per scene via Serper Google Images)\n3. Semantic re-ranking to select most representative photo"]
     ART --> S2["Phase 7: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
-    S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated Unsplash CDN URLs (no hallucination)"]
+    S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated image URLs (or null on miss; zero hallucination)"]
     RES --> O["Storyboard JSON & Markdown\n(Pitches, Director Decision, Scenes, Voiceover, Image URLs)"]
 ```
 
@@ -104,7 +104,7 @@ To collect watch histories from study participants without API keys or credentia
 │       ├── youtube_tool.py        # YouTube spoken transcript & oEmbed metadata extraction
 │       ├── knowledge_tool.py      # Multi-tier knowledge search (Wikipedia + NewsAPI + LLM synthesis)
 │       ├── news_tool.py           # Backward-compatibility wrapper for knowledge_tool
-│       ├── image_tool.py          # Unsplash API search with query sanitization
+│       ├── image_tool.py          # Serper.dev Google Images (omits scene image on miss/error) & filtering
 │       └── import_user_history.py # CLI ingestion, title enrichment & random split helper
 ├── baseline/
 │   └── single_agent_baseline.py   # Scientifically neutral single-agent baseline (DeepSeek Reasoner low + Top-1 image search)
@@ -130,5 +130,6 @@ To collect watch histories from study participants without API keys or credentia
 | Variable | Required | Description | Fallback |
 |---|---|---|---|
 | `DEEPSEEK_API_KEY` | Recommended | DeepSeek API key for LLM agents | OpenAI-compatible endpoint |
+| `SERPER_API_KEY` | Recommended | Serper.dev API key for Google Images (`IMAGE_API_PROVIDER=serper`) & web search | Returns `[]` / omits scene image on error or miss (no provider fallback) |
 | `NEWSAPI_KEY` | Optional | NewsAPI.org key for breaking news search | Falls back to Wikipedia / LLM synthesis |
-| `UNSPLASH_ACCESS_KEY` | Optional | Unsplash API key for stock photo search | Falls back to thematic placeholder CDN assets |
+| `UNSPLASH_ACCESS_KEY` | Optional | Unsplash API key (only used if `IMAGE_API_PROVIDER=unsplash`) | Returns mock placeholders only if explicit Unsplash provider fails |

@@ -214,8 +214,11 @@ class TestPipeline(unittest.TestCase):
             self.assertIn(forbidden_example, prompt_text, f"{prompt_name} missing forbidden example")
 
     def test_search_images_per_page(self):
+        import os
+        from unittest.mock import patch
         from src.tools.image_tool import search_images
-        res = search_images("origami paper", per_page=1)
+        with patch.dict(os.environ, {"IMAGE_API_PROVIDER": "mock"}, clear=False):
+            res = search_images("origami paper", per_page=1)
         self.assertEqual(len(res), 1)
         self.assertIn("url", res[0])
         self.assertIn("description", res[0])
@@ -230,6 +233,7 @@ class TestPipeline(unittest.TestCase):
         self.assertIn('"image_query"', _BASELINE_SYSTEM_PROMPT)
 
     def test_baseline_visual_resolution(self):
+        import os
         from unittest.mock import patch, MagicMock
         from baseline.single_agent_baseline import SingleAgentBaseline
 
@@ -246,7 +250,8 @@ class TestPipeline(unittest.TestCase):
         mock_response.usage.completion_tokens = 50
         mock_client.chat.completions.create.return_value = mock_response
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory() as tmp_dir, \
+             patch.dict(os.environ, {"IMAGE_API_PROVIDER": "mock"}, clear=False):
             baseline = SingleAgentBaseline(model="deepseek-chat", output_dir=tmp_dir)
             baseline.client = mock_client
             state = baseline.run([{"title": "Folding paper", "url": "https://youtube.com/shorts/test"}])
@@ -453,8 +458,8 @@ class TestPipeline(unittest.TestCase):
 
     def test_user_output_directory_structure_and_naming(self):
         """Test per-user subfolder structure and universal naming convention."""
-        import tempfile, re
-        from unittest.mock import MagicMock
+        import os, tempfile, re
+        from unittest.mock import MagicMock, patch
         from baseline.single_agent_baseline import SingleAgentBaseline
 
         mock_client = MagicMock()
@@ -470,7 +475,8 @@ class TestPipeline(unittest.TestCase):
         mock_response.usage.completion_tokens = 40
         mock_client.chat.completions.create.return_value = mock_response
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory() as tmp_dir, \
+             patch.dict(os.environ, {"IMAGE_API_PROVIDER": "mock"}, clear=False):
             baseline = SingleAgentBaseline(model="deepseek-chat", output_dir=tmp_dir)
             baseline.client = mock_client
             state = baseline.run(
@@ -944,6 +950,217 @@ class TestPipeline(unittest.TestCase):
 
         self.assertEqual(mock_get.call_count, 1)
         self.assertTrue(res[0]["url"].startswith("https://example.com/images/"))
+
+    def test_serper_image_search_filters_and_download_ua_retry(self):
+        import io
+        import os
+        import urllib.error
+        from unittest.mock import MagicMock, patch
+        from PIL import Image
+        import storyboard_to_video as s2v
+        from src.tools.image_tool import search_image_candidates
+
+        # 1. Serper filtering: drops watermarks (incl. ftcdn/abposters/plus.unsplash), social walls, SVG,
+        #    rejects 403/HTML URLs via reachability check, and demotes eBay behind clean editorial photos.
+        serper_resp = MagicMock()
+        serper_resp.status_code = 200
+        serper_resp.json.return_value = {
+            "images": [
+                {"title": "Adobe WM", "imageUrl": "https://as1.ftcdn.net/v2/jpg/1.jpg", "source": "ABPosters", "domain": "www.abposters.com", "imageWidth": 1000},
+                {"title": "Unsplash+ WM", "imageUrl": "https://plus.unsplash.com/premium_photo-1.jpg", "source": "Unsplash", "domain": "unsplash.com", "imageWidth": 1200},
+                {"title": "Insta Wall", "imageUrl": "https://lookaside.instagram.com/seo/?media_id=1", "source": "Instagram", "domain": "www.instagram.com", "imageWidth": 1000},
+                {"title": "Vector Icon", "imageUrl": "https://cdn.example.org/icon.svg", "source": "Icons", "domain": "cdn.example.org"},
+                {"title": "Blocked Editorial", "imageUrl": "https://www.rd.com/photo.jpg", "source": "RD", "domain": "www.rd.com", "imageWidth": 1200},
+                {"title": "HTML Wall", "imageUrl": "https://wall.example.com/photo.jpg", "source": "Wall", "domain": "wall.example.com", "imageWidth": 1200},
+                {"title": "Etsy Prop", "imageUrl": "https://i.etsystatic.com/shop.jpg", "source": "Etsy", "domain": "www.etsy.com", "imageWidth": 1200},
+                {"title": "Clean Photo", "imageUrl": "https://images.pexels.com/photos/123/clean.jpeg", "source": "Pexels", "domain": "www.pexels.com", "imageWidth": 1600},
+            ]
+        }
+
+        def fake_get(url, **kwargs):
+            r = MagicMock()
+            r.__enter__ = lambda s: s
+            r.__exit__ = lambda s, *a: False
+            if "rd.com" in url:
+                r.status_code = 403
+                r.headers = {}
+            elif "wall.example.com" in url:
+                r.status_code = 200
+                r.headers = {"Content-Type": "text/html; charset=utf-8"}
+            else:
+                r.status_code = 200
+                r.headers = {"Content-Type": "image/jpeg"}
+            return r
+
+        with patch.dict(os.environ, {"IMAGE_API_PROVIDER": "serper", "SERPER_API_KEY": "fake_s", "UNSPLASH_ACCESS_KEY": ""}, clear=False), \
+             patch("src.tools.image_tool.requests.post", return_value=serper_resp) as mock_post, \
+             patch("src.tools.image_tool.requests.get", side_effect=fake_get):
+            cands = search_image_candidates("cards on poker mat", max_results=4)
+
+        self.assertEqual(mock_post.call_count, 1)
+        self.assertEqual([c["url"] for c in cands], [
+            "https://images.pexels.com/photos/123/clean.jpeg",
+            "https://i.etsystatic.com/shop.jpg",
+        ])
+        self.assertEqual(cands[0]["candidate_id"], "cand1")
+        self.assertIn("Pexels", cands[0]["alt_text"])
+
+        # 2. Serper failures / empty results NEVER fall back to Unsplash, Pexels, or mock URLs — return [] cleanly.
+        serper_err = MagicMock(status_code=500, text="Server Error")
+        with patch.dict(
+            os.environ,
+            {
+                "IMAGE_API_PROVIDER": "serper",
+                "SERPER_API_KEY": "fake_s",
+                "UNSPLASH_ACCESS_KEY": "fake_u",
+                "PEXELS_API_KEY": "fake_p",
+            },
+            clear=False,
+        ), \
+             patch("src.tools.image_tool.requests.post", return_value=serper_err) as mock_err_post, \
+             patch("src.tools.image_tool.requests.get") as mock_err_get:
+            no_failover = search_image_candidates("cards on poker mat", fallback_query="poker table", max_results=2)
+        self.assertEqual(no_failover, [])
+        self.assertEqual(mock_err_post.call_count, 1)  # Must not retry fallback_query or alternate providers
+        self.assertEqual(mock_err_get.call_count, 0)
+
+        with patch.dict(
+            os.environ,
+            {
+                "IMAGE_API_PROVIDER": "serper",
+                "SERPER_API_KEY": "",
+                "UNSPLASH_ACCESS_KEY": "fake_u",
+                "PEXELS_API_KEY": "fake_p",
+            },
+            clear=False,
+        ), \
+             patch("src.tools.image_tool.requests.post") as mock_missing_post, \
+             patch("src.tools.image_tool.requests.get") as mock_missing_get:
+            no_key_res = search_image_candidates("cards on poker mat", max_results=2)
+        self.assertEqual(no_key_res, [])
+        self.assertEqual(mock_missing_post.call_count, 0)
+        self.assertEqual(mock_missing_get.call_count, 0)
+
+        serper_watermarked_only = MagicMock(status_code=200)
+        serper_watermarked_only.json.return_value = {
+            "images": [
+                {"title": "Shutterstock WM", "imageUrl": "https://www.shutterstock.com/1.jpg", "source": "SS", "domain": "www.shutterstock.com"},
+            ]
+        }
+        with patch.dict(
+            os.environ,
+            {"IMAGE_API_PROVIDER": "serper", "SERPER_API_KEY": "fake_s", "UNSPLASH_ACCESS_KEY": "fake_u"},
+            clear=False,
+        ), \
+             patch("src.tools.image_tool.requests.post", return_value=serper_watermarked_only), \
+             patch("src.tools.image_tool.requests.get") as mock_wm_get:
+            empty_res = search_image_candidates("cards on poker mat", fallback_query="cards", max_results=2)
+        self.assertEqual(empty_res, [])
+        self.assertEqual(mock_wm_get.call_count, 0)
+
+        # 3. download_image sends project UA to Wikimedia directly and retries non-Wiki 403 with project UA.
+        buf = io.BytesIO()
+        Image.new("RGB", (32, 32), color=(20, 40, 60)).save(buf, format="JPEG")
+        jpg_bytes = buf.getvalue()
+        seen_uas = []
+
+        def fake_urlopen(req, timeout=15):
+            seen_uas.append((req.full_url, req.get_header("User-agent")))
+            if "flickr.com" in req.full_url and req.get_header("User-agent") == "Mozilla/5.0":
+                raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+            ctx = MagicMock()
+            ctx.__enter__ = lambda s: io.BytesIO(jpg_bytes)
+            ctx.__exit__ = lambda s, *a: False
+            return ctx
+
+        with patch("storyboard_to_video.urllib.request.urlopen", side_effect=fake_urlopen):
+            img_wiki = s2v.download_image("https://upload.wikimedia.org/wikipedia/commons/test.jpg")
+            img_flickr = s2v.download_image("https://live.staticflickr.com/1/test.jpg")
+
+        self.assertIsNotNone(img_wiki)
+        self.assertIsNotNone(img_flickr)
+        self.assertEqual(seen_uas[0][1], s2v._PROJECT_USER_AGENT)
+        self.assertEqual(seen_uas[1][1], "Mozilla/5.0")
+        self.assertEqual(seen_uas[2][1], s2v._PROJECT_USER_AGENT)
+
+    def test_serper_miss_omits_images_cleanly_in_pipeline_and_baseline(self):
+        """When Serper yields no images, both agentic and baseline pipelines omit images cleanly with image_url=None."""
+        import json
+        import tempfile
+        from unittest.mock import MagicMock, patch
+        from baseline.single_agent_baseline import SingleAgentBaseline
+        from src.agents.art_director_agent import ArtDirectorAgent
+        from src.agents.scriptwriter_agent import ScriptwriterAgent
+        from src.core.state import SharedState, Storyboard, UserHistory
+
+        # 1. Agentic ArtDirector + Scriptwriter.refine path when search_image_candidates returns []
+        state = SharedState(
+            user_history=UserHistory(videos=[{"title": "Science", "url": "https://youtube.com/shorts/1"}]),
+            storyboard=Storyboard(
+                title="Pendulum Wave",
+                target_duration_seconds=30,
+                overall_narrative="Physics demo.",
+                scenes=[
+                    {"scene_id": 1, "description": "Wooden pendulum frame", "voiceover": "Watch these pendulums swing in sync.", "duration_seconds": 15},
+                    {"scene_id": 2, "description": "Brass spheres in motion", "voiceover": "Each length shifts the phase slightly.", "duration_seconds": 15},
+                ],
+            ),
+        )
+        query_resp = MagicMock()
+        query_resp.choices = [MagicMock()]
+        query_resp.choices[0].message.content = json.dumps({
+            "scene_queries": [
+                {"scene_id": 1, "primary_query": "wooden pendulum physics frame", "fallback_query": "pendulum"},
+                {"scene_id": 2, "primary_query": "brass spheres pendulum row", "fallback_query": "brass spheres"},
+            ]
+        })
+        query_resp.usage = None
+
+        art_client = MagicMock()
+        art_client.chat.completions.create.return_value = query_resp
+        art_director = ArtDirectorAgent(model="deepseek-chat", client=art_client)
+
+        script_client = MagicMock()
+        scriptwriter = ScriptwriterAgent(model="deepseek-reasoner", client=script_client)
+
+        with patch("src.agents.art_director_agent.search_image_candidates", return_value=[]):
+            state = art_director.run(state)
+
+        self.assertEqual(state.image_context.images, [])
+        # Should NOT invoke Art Director selection LLM call when 0 candidates exist across all scenes
+        self.assertEqual(art_client.chat.completions.create.call_count, 1)
+
+        state = scriptwriter.refine(state)
+        # Should NOT invoke Refine LLM call when 0 image assets exist
+        self.assertEqual(script_client.chat.completions.create.call_count, 0)
+        self.assertEqual(len(state.storyboard.scenes), 2)
+        self.assertIsNone(state.storyboard.scenes[0].get("image_url"))
+        self.assertIsNone(state.storyboard.scenes[1].get("image_url"))
+
+        # 2. Baseline path when search_images returns []
+        base_resp = MagicMock()
+        base_resp.choices = [MagicMock()]
+        base_resp.choices[0].message.content = json.dumps({
+            "title": "Pendulum Wave",
+            "overall_narrative": "Physics demo.",
+            "scenes": [
+                {"scene_id": 1, "description": "Pendulum frame", "image_query": "wooden pendulum", "voiceover": "Pendulums drift apart then realign.", "duration_seconds": 15}
+            ],
+        })
+        base_resp.usage.prompt_tokens = 20
+        base_resp.usage.completion_tokens = 20
+        base_client = MagicMock()
+        base_client.chat.completions.create.return_value = base_resp
+
+        with tempfile.TemporaryDirectory() as tmp_dir, \
+             patch("baseline.single_agent_baseline.search_images", return_value=[]):
+            baseline = SingleAgentBaseline(model="deepseek-chat", output_dir=tmp_dir)
+            baseline.client = base_client
+            base_state = baseline.run([{"title": "Science", "url": "https://youtube.com/shorts/1"}], user_id="testuser")
+
+        self.assertEqual(len(base_state.storyboard.scenes), 1)
+        self.assertIsNone(base_state.storyboard.scenes[0].get("image_url"))
+        self.assertIsNone(base_state.storyboard.scenes[0].get("image_description"))
 
     def test_video_intro_padding_and_pcm_mkv_intermediates(self):
         import types

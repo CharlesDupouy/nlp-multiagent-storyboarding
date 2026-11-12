@@ -76,6 +76,14 @@ class ScriptwriterAgent(BaseAgent):
             self._log(state, "No draft scenes found to refine. Running draft first.")
             return self.draft(state)
 
+        if not state.image_context.images:
+            self._log(
+                state,
+                "No image assets retrieved; keeping draft storyboard scenes with image_url=None.",
+            )
+            state.storyboard.resolve_image_urls(state.image_context)
+            return state
+
         draft_scenes = list(state.storyboard.scenes)
         expected_count = len(draft_scenes)
 
@@ -260,7 +268,7 @@ AVAILABLE VISUAL ASSETS CATALOG
 TASK
 ====
 Refine the storyboard scenes to visually ground them with the available assets:
-1. For each scene, assign the best fitting asset ID (e.g. "image_ref": "img1") or null if none fits.
+1. For each scene, assign the best fitting asset ID (e.g. "image_ref": "img1") ONLY if it genuinely fits the scene, or null if no listed asset matches (do NOT force an unrelated image onto a scene).
 2. Slightly tweak the visual description and voiceover if needed to match what is depicted in the chosen image asset.
 3. Preserve (and clarify if any step feels rushed) complete first-watch setup/rules and causal explanation ("why" it works).
 4. Enforce ONE consistent external off-screen narrator voiceover across all scenes (eliminate any character roleplay, spectator commands, or dialogue). Keep scene pacing (~15-25 spoken words per scene, ~125-150 words total for 60s) and target duration consistent.
@@ -337,7 +345,7 @@ Refine the scenes to anchor your entertaining narrative in the real visual evide
 1. Ground the story into the real-world objects, places, or people shown in the image assets.
 2. FIRST-WATCH CLARITY & CAUSAL COMPLETENESS: Preserve (and clarify if needed) all essential setup rules, context, and plain-language causal explanations ("why" the trick/phenomenon works) so a viewer with zero prior knowledge understands the entire point on the first watch. Never compress away crucial setup or causal bridges.
 3. Maintain high entertainment value: witty, fast-paced, and captivating, while keeping spoken voiceover crisp (~15 to 25 words per scene, ~125 to 150 spoken words total for 60s) so Text-To-Speech fits the target duration. Do NOT include a "subtitle" field.
-4. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") or null. NEVER write a full URL.
+4. In "image_ref", use ONLY the symbolic identifiers provided (e.g. "img1", "img2") that genuinely fit the scene, or null if no listed asset matches (never force an unrelated image onto a scene). NEVER write a full URL.
 5. Language: Keep the same language as the draft.
 
 CRITICAL NEGATIVE CONSTRAINTS (VOICEOVER ONLY, ZERO ROLEPLAY, ZERO SFX, NO PLACEHOLDERS):

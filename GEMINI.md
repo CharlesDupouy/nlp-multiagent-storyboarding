@@ -108,7 +108,7 @@ GroupProjetct/
 │       ├── youtube_tool.py      # youtube-transcript-api and oEmbed metadata scraper
 │       ├── knowledge_tool.py    # Multi-tier knowledge search (NewsAPI + Wikipedia + LLM synthesis)
 │       ├── news_tool.py         # Backward-compatibility wrapper for knowledge_tool
-│       ├── image_tool.py        # Unsplash API client with cinematic query sanitizer
+│       ├── image_tool.py        # Serper.dev Google Images (omits image on miss/error) & sanitizer
 │       └── import_user_history.py # Ingestion helper for web collector exports
 ├── baseline/
 │   └── single_agent_baseline.py # Fair, competitive zero-shot single-agent baseline
@@ -146,9 +146,9 @@ flowchart TD
     WR --> DIR["Phase 3: DirectorAgent (Showrunner)\nCritiques all 3 pitches, selects winner & issues production notes"]
     DIR --> N["Phase 4: KnowledgeRetrieverAgent (Targeted Research)\nMulti-tiered queries (Wikipedia + NewsAPI + LLM synthesis)"]
     N --> S1["Phase 5: ScriptwriterAgent (Draft Pass)\nDrafts 60s storyboard executing winning pitch + director guidance"]
-    S1 --> IMG["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no cinematic fluff)\n2. Candidate retrieval (4 per scene via Unsplash API)\n3. Semantic re-ranking to select most representative photo"]
+    S1 --> IMG["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no cinematic fluff)\n2. Candidate retrieval (4 per scene via Serper Google Images)\n3. Semantic re-ranking to select most representative photo"]
     IMG --> S2["Phase 7: ScriptwriterAgent (Refine Pass)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
-    S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated Unsplash CDN URLs (zero hallucination)"]
+    S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated image URLs (or null on miss; zero hallucination)"]
     RES --> O["Storyboard JSON & Markdown\n(Pitches, Director Decision, Scenes, Subtitles, Narration, Image URLs)"]
 ```
 
@@ -202,7 +202,7 @@ Whenever you introduce an architectural change, prompt revision, new tool, or ru
 
 ### Rule 6: Privacy & Secret Hygiene
 - Never commit `.env` or personal watch history JSON files in `data/user_histories/` (only `example.json` is committed).
-- API keys must be loaded exclusively via environment variables (`DEEPSEEK_API_KEY`, `NEWSAPI_KEY`, `UNSPLASH_ACCESS_KEY`).
+- API keys must be loaded exclusively via environment variables (`DEEPSEEK_API_KEY`, `SERPER_API_KEY`, `NEWSAPI_KEY`, `UNSPLASH_ACCESS_KEY`).
 
 ---
 
@@ -265,8 +265,9 @@ The application is configured via `configs/config.yaml` and environment variable
 | `DEEPSEEK_API_KEY` | Recommended | API key for DeepSeek LLM (`deepseek-chat`) | OpenAI-compatible endpoint |
 | `NEWSAPI_KEY` | Optional | API key for NewsAPI.org | Falls back to realistic mock news articles |
 | `NEWS_API_PROVIDER` | Optional | Provider flag (`newsapi` or `mock`) | `mock` if key is unset |
-| `UNSPLASH_ACCESS_KEY` | Optional | API key for Unsplash Image API | Falls back to thematic placeholder CDN images |
-| `IMAGE_API_PROVIDER` | Optional | Provider flag (`unsplash` or `mock`) | `mock` if key is unset |
+| `SERPER_API_KEY` | Recommended | API key for Serper.dev (Google Images & web fallback) | Returns `[]` / omits scene image on miss or error (no fallback providers) |
+| `UNSPLASH_ACCESS_KEY` | Optional | API key for Unsplash Image API (only used when `IMAGE_API_PROVIDER=unsplash`) | Placeholder URLs only when explicit Unsplash provider fails |
+| `IMAGE_API_PROVIDER` | Optional | Provider flag (`serper`, `unsplash`, `pexels`, or `mock`) | `serper` default (returns `[]` on miss/error) |
 
 ---
 

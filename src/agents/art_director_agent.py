@@ -5,7 +5,7 @@ Responsibility:
   - Takes the drafted storyboard (scenes, visual descriptions).
   - Phase 1: Formulates tangible, concrete physical queries (primary & fallback)
     avoiding cinematography jargon that breaks stock search.
-  - Phase 2: Retrieves multiple candidate stock photos per scene from Unsplash/Pexels.
+  - Phase 2: Retrieves multiple candidate images per scene (Serper.dev / Unsplash).
   - Phase 3 (Art Director Pass): Inspects candidate descriptions and selects the
     most visually faithful and representative image for each scene.
   - Formats results with discrete identifiers (img1, img2, ...) so the downstream
@@ -64,8 +64,8 @@ OVERALL NARRATIVE: {state.storyboard.overall_narrative}
 DRAFT SCENES:
 {scene_descriptions}
 
-Formulate concrete visual search queries for stock photography libraries (Unsplash).
-Remember: stock search engines match physical objects and places, NOT camera angles or editing techniques.
+Formulate concrete visual search queries for web/stock image search.
+Remember: search engines match physical objects and places, NOT camera angles or editing techniques.
 """
         raw_queries = chat_completion(
             client=self.client,
@@ -104,6 +104,14 @@ Remember: stock search engines match physical objects and places, NOT camera ang
         # -------------------------------------------------------------------
         # 3. Art Director Selection Pass: Pick most representative candidate
         # -------------------------------------------------------------------
+        if not any(scene_candidates_map.values()):
+            self._log(
+                state,
+                "No image candidates retrieved for any scene; skipping Art Director selection and omitting scene images.",
+            )
+            state.image_context = ImageContext(images=[])
+            return state
+
         self._log(state, "Art Director evaluating candidates to select the most representative photos.")
         art_director_prompt = _build_art_director_prompt(scenes, scene_candidates_map)
 
@@ -220,10 +228,10 @@ def _parse_art_director_selections(raw: str) -> dict[int, str]:
 
 
 _IMAGE_QUERY_SYSTEM_PROMPT_DEFAULT = """\
-You are an expert Art Director formulating stock photo search queries for an external image database (Unsplash).
+You are an expert Art Director formulating visual image search queries for an external web/stock image search engine (Google Images via Serper).
 
 CRITICAL SEARCH ENGINE PRINCIPLES:
-1. LANGUAGE RULE (MANDATORY): ALWAYS write both "primary_query" and "fallback_query" in ENGLISH (concrete physical English nouns/adjectives), EVEN IF the storyboard scenes, title, or voiceover are written in French or another language. Stock photo engines (Unsplash) perform best on simple English keywords and fail on non-English phrases.
+1. LANGUAGE RULE (MANDATORY): ALWAYS write both "primary_query" and "fallback_query" in ENGLISH (concrete physical English nouns/adjectives), EVEN IF the storyboard scenes, title, or voiceover are written in French or another language. Image search engines perform best on simple English keywords and fail on non-English phrases.
 2. Search engines match TANGIBLE PHYSICAL OBJECTS and REAL-WORLD SETTINGS (e.g., "multicolor ballpoint pen", "students in classroom", "vintage rotary phone", "newspaper on wooden table").
 3. STRICTLY FORBIDDEN: NEVER include video production directions or shot modifiers in the query.
    - Do NOT include: "split screen", "exploded view", "macro", "closeup", "cinematic", "drone shot", "pov", "2000s", "vintage style".
