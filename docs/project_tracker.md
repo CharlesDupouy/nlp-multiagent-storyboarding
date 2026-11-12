@@ -17,13 +17,13 @@
 | Component | Owner | Status |
 |---|---|---|
 | Data collection & public dataset filtering | Antoine | 🔲 In progress (Peer collector live on GitHub Pages; `--split` partitioning ready) |
-| Single-agent baseline | Antoine | 🟢 Implemented, neutralized & tested on real user data (with Unsplash visual parity) |
+| Single-agent baseline | Antoine | 🟢 Implemented, neutralized & tested on real user data (with Serper top-1 visual parity) |
 | Multi-agent framework (core architecture) | Charles | 🟢 Writers' Room (R1) + Director (R1) + Knowledge Retriever (Multi-Tier) + Art Director (Re-ranking) complete & verified (v4.1) |
 | Prompt engineering & refinement | Charles | 🟢 v3.1 active (Verbatim dialogue, zero placeholders, domain-targeted research, anti-regurgitation) |
-| Real API integration (knowledge, images) | Charles | 🟢 100% Complete (NewsAPI + Wikipedia + Unsplash + YouTube transcripts integrated & live) |
+| Real API integration (knowledge, images) | Charles | 🟢 100% Complete (NewsAPI + Wikipedia + Serper Google Images + YouTube transcripts integrated & live) |
 | LLM-as-a-judge evaluator | Max | 🟢 Complete (`evaluation/llm_judge.py` with 5D pairwise verdicts, 1–5 Likert grades, and visual caption grounding) |
 | Automated evaluation over dataset | Max | 🟢 Validated on DeepSeek pilot & dry-run (`outputs/judge/`); pending full batch |
-| Demo sketch renderer (TTS + images) | Max | 🟢 Neural Edge-TTS + dynamic subtitles + Unsplash slideshow (`storyboard_to_video.py`) |
+| Demo sketch renderer (TTS + images) | Max | 🟢 Neural Edge-TTS + scene footer + visual slideshow (`storyboard_to_video.py`) |
 
 ---
 
@@ -40,9 +40,9 @@ flowchart TD
     WR --> DIR["Phase 3: DirectorAgent (DeepSeek R1 Showrunner)\nCritiques all 3 pitches, selects winner & issues production notes"]
     DIR --> K["Phase 4: KnowledgeRetrieverAgent (Targeted Research)\nMulti-tiered search: NewsAPI + MediaWiki/Wikipedia + LLM Synthesis"]
     K --> S1["Phase 5: ScriptwriterAgent (Draft Pass, DeepSeek R1)\nDrafts 60s storyboard executing winning pitch + director guidance"]
-    S1 --> ART["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no camera jargon)\n2. 4-candidate Unsplash API retrieval\n3. Semantic re-ranking to select best photographic asset"]
+    S1 --> ART["Phase 6: ArtDirectorAgent\n1. Physical query sanitization (no camera jargon)\n2. 4-candidate Serper Google Images retrieval\n3. Semantic re-ranking to select best photographic asset"]
     ART --> S2["Phase 7: ScriptwriterAgent (Refine Pass, DeepSeek R1)\nGrounds scenes to visual assets using symbolic refs ('img1')"]
-    S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated Unsplash CDN URLs (zero hallucination)"]
+    S2 --> RES["Programmatic URL Resolution\nMaps 'image_ref' → validated image URLs (or null on miss; zero hallucination)"]
     RES --> O["Storyboard JSON & Markdown\n(Pitches, Director Decision, Scenes, Subtitles, Narration, Image URLs)"]
 ```
 
@@ -63,7 +63,7 @@ flowchart TD
 | **Phase 3: Director** | `DirectorAgent` | `UserProfile` + `candidate_pitches` | `selected_pitch` + critique + production notes | `deepseek-reasoner` (R1) | Critical showrunner evaluation |
 | **Phase 4: Knowledge Retriever** | `KnowledgeRetrieverAgent` | `selected_pitch` + production notes | `KnowledgeContext` (verified headlines, lore & summaries) | `deepseek-chat` | `knowledge_tool.py` (NewsAPI + Wikipedia + Tavily + LLM Synthesis) |
 | **Phase 5: Scriptwriter (Draft)** | `ScriptwriterAgent` | Pitch + notes + `KnowledgeContext` | Draft `Storyboard` (scenes, verbatim dialogue, cues) | `deepseek-reasoner` (R1) | Structured narrative synthesis |
-| **Phase 6: Art Director** | `ArtDirectorAgent` | Draft scenes + query prompts | `ImageContext` (`img1`..`img6` catalog of validated photos) | `deepseek-chat` | `image_tool.py` (Unsplash API + 4-candidate semantic re-ranking) |
+| **Phase 6: Art Director** | `ArtDirectorAgent` | Draft scenes + query prompts | `ImageContext` (`img1`..`img6` catalog of validated photos) | `deepseek-chat` | `image_tool.py` (Serper Google Images + 4-candidate semantic re-ranking) |
 | **Phase 7: Scriptwriter (Refine)** | `ScriptwriterAgent` | Draft scenes + `ImageContext` | Refined `Storyboard` (`image_ref: 'img1'`) | `deepseek-reasoner` (R1) | Programmatic CDN URL resolver |
 
 ### Controlled Comparison
@@ -72,7 +72,7 @@ flowchart TD
 flowchart LR
     H["Identical User Watch History\n(videos: list[dict[str, str]])"]
     H --> MA["Multi-Agent Pipeline (v4.1)\nProfile → Writers' Room → Director → Knowledge → Draft → Art Director → Refine"]
-    H --> SA["Single-Agent Baseline (v3.5)\nZero-shot, same model, same watch history + Naive Top-1 Unsplash Search"]
+    H --> SA["Single-Agent Baseline (v3.5)\nZero-shot, same model, same watch history + Naive Top-1 Serper Search"]
     MA --> SB1["Storyboard A\n(Grounded with curated imagery & verified facts)"]
     SA --> SB2["Storyboard B\n(Zero-shot single pass with naive image retrieval)"]
     SB1 --> E["Automated Judge & Blind Human A/B\n5D Pairwise Rubric + 1-5 Likert Grades + Neural Video Sketches"]
@@ -114,7 +114,7 @@ flowchart LR
 | Temperature (knowledge brainstorm) | 0.7 | Medium — creative angle ideation |
 | Temperature (script draft/refine) | N/A (`deepseek-reasoner`) | Managed internally by R1 deterministic reasoning |
 | News & Knowledge API | NewsAPI.org + MediaWiki (Wikipedia REST) | Multi-tiered live API client with evergreen lore lookup and LLM Tier 3 fact synthesis fallback |
-| Image API | Unsplash API | Verified live API client with photographic query sanitization & Art Director 4-candidate re-ranking |
+| Image API | Serper.dev Google Images (`50 QPS`, 2,500 free queries; no fallback providers) | Switched primary provider after empirical 10-query benchmark; hardened against watermarked stock CDNs, social login walls, and non-image links via live reachability check; omits scene images cleanly (`[]` / `null`) on error or miss instead of failing over |
 | Speech Synthesis (TTS) | Microsoft Edge Neural TTS (`edge-tts`) | Broadcast-quality neural voices (`fr-FR-HenriNeural`, `en-US-ChristopherNeural`, etc.) with standalone `ffmpeg` duration probing; graceful offline fallback to `pyttsx3`/`espeak` |
 | DeepSeek Account Balance | **$3.35 USD** (live) | Sufficient for ~615+ full 7-phase multi-agent runs or ~11,000 baseline runs |
 
@@ -347,6 +347,13 @@ Documented failure modes encountered during development, their root causes, and 
 - **Mitigation & Fix:** Raised the thinking headroom floor from `8192` to `16384` in `chat_completion()` (`src/core/llm_client.py`) and added a scene-count completeness retry + fallback draft-scene preservation guard (plus `sanitize_scenes()`) in `ScriptwriterAgent.refine()`. Cleanly regenerated `charles_part1` (`agentic_charles_part1_20261111_170818`, `6` scenes, `6/6` Unsplash, `58.48s` MP4, Abs `relevance=5`, `completeness=5`, `coherence=5`).
 - **Paper Section:** *Methodology & Systems Engineering: Reasoning-Token Headroom & Output Integrity.*
 
+### CS-16: Visual Benchmarking & Migration from 50 req/hr Unsplash Demo to Hardened Serper.dev Images
+- **Component:** `src/tools/image_tool.py`, `prompts/image_query.txt`, `prompts/art_director_selection.txt`, `storyboard_to_video.py`, & `tools/benchmark_image_apis.py`
+- **Trigger / Symptom:** With Pexels new API key issuance paused and Unsplash Demo capped at `50 req/hour`, batch generation for a ~15-participant study (~350–700 scene queries) frequently exhausted Unsplash quota (`HTTP 403`). Before switching providers, we built `tools/benchmark_image_apis.py` and evaluated **Openverse**, **Wikimedia Commons**, and **Serper.dev Google Images** across 10 representative multi-noun storyboard queries with real Pillow image download verification.
+- **Root Cause / Empirical Findings:** Openverse (`3/10` hits, `7.99s` mean latency, `HTTP 504` timeout on Eiffel Tower, `6/9` hosts blocking bare `"Mozilla/5.0"`) and Wikimedia Commons (`3/10` hits on 5–7 word scene descriptions due to strict AND matching) failed on narrative scene queries. Serper.dev achieved **`10/10` query hits** (`1.61s` mean latency, `1,240 px` median width) and even surfaced un-throttled `images.unsplash.com` / `images.pexels.com` assets, *but* exposed three web-scraping hazards: (1) hidden watermarked CDNs (`abposters.com` serving Adobe Stock `as1.ftcdn.net`, `plus.unsplash.com`, `classroomclipart.com`) slipping past naive `shutterstock`/`getty` filters; (2) login-walled social hosts (`facebook.com`, `lookaside.fbsbx.com`, `instagram.com`, `tiktok.com`) causing `HTTP 403` / HTML `UnidentifiedImageError` (`0/4` on `q07`); and (3) shopping listings (`ebay.com`, `etsy.com`) appearing for physical objects (`q06`).
+- **Mitigation & Fix:** Switched `IMAGE_API_PROVIDER` primary to `serper` (`20` candidates fetched per query, `1` credit) with Unsplash failover in `src/tools/image_tool.py`, adding: (1) expanded watermark-CDN & social-wall domain blocklists (`ftcdn.net`, `abposters.com`, `plus.unsplash.com`, `facebook/instagram/tiktok/fbsbx`); (2) soft demotion of shopping domains behind editorial/photo results plus an Art Director anti-e-commerce selection rule (`prompts/art_director_selection.txt`); (3) streaming HTTP `200` + raster `Content-Type` / magic-byte reachability verification before candidate indexing; and (4) compliant project `User-Agent` handling + `Mozilla/5.0` retry fallback in `storyboard_to_video.py:download_image()`.
+- **Paper Section:** *Methodology: Visual Search Trade-offs; Error Analysis.*
+
 ---
 
 ## Cost & Compute Log
@@ -413,6 +420,9 @@ Documented failure modes encountered during development, their root causes, and 
 
 | Date | Decision | Rationale | Alternatives considered |
 |---|---|---|---|
+| 2026-11-12 | Simplify History Collector UI (`docs/index.html`, `docs/collector.js`, `tools/history_collector/`) | Removed the **Developer Console** tab, the **Verify Exported JSON** paste/drop field, and the bookmarklet's **Copy JSON to Clipboard** button to eliminate participant confusion. The collector page and bookmarklet overlay now focus strictly on the Bookmarks Bar drag-and-drop flow and a single **Download JSON** action saving `youtube_shorts_history.json`, with updated EN/FR guides in `docs/human_eval/`. | Keeping dual Bookmarklet/Console tabs, manual clipboard copy, and post-export JSON paste box |
+| 2026-11-12 | Disable Multi-Provider & Mock Image Failover in Serper Mode (`image_tool.py`, `ArtDirectorAgent`, `ScriptwriterAgent`) | After adopting Serper.dev Google Images, failing over on Serper errors/misses into Unsplash Demo (`50 req/hr`), Pexels (paused), or fake `example.com` mock URLs re-introduced rate-limit failures and invalid placeholder URLs. When `IMAGE_API_PROVIDER=serper` fails or yields 0 verified candidates, `search_image_candidates()` / `search_images()` now returns `[]` directly; `ArtDirectorAgent` and `ScriptwriterAgent.refine()` skip wasted selection/refine LLM passes when no images exist, and affected scenes retain `image_ref = null` / `image_url = null` cleanly across storyboards and `storyboard_to_video.py`. | Failing over silently to Unsplash Demo / Pexels / fake `example.com` placeholder URLs |
+| 2026-11-11 | Switch Primary Image Search to Hardened Serper.dev Google Images with Unsplash Failover (`image_tool.py`) | Unsplash Demo (`50 req/hr`) repeatedly stalled human-study batch generation and Pexels new-key issuance is paused. Our 10-query empirical benchmark (`tools/benchmark_image_apis.py`) showed Openverse (`3/10` hits, `8.0s`, HTTP `504`) and Wikimedia (`3/10` hits) fail on multi-word scene descriptions, whereas Serper.dev hit `10/10` queries (`1.6s`, `2,500` free credits at `50 QPS`) and returned clean Unsplash/Pexels/editorial photos. Hardened with watermark-CDN & social-wall blocking, shopping demotion, and live `200 + image/*` reachability checks. | Staying on Unsplash Demo `50/hr` (rate-limit bottleneck); Openverse / Wikimedia Commons standalone (30% recall on narrative scene prompts) |
 | 2026-11-11 | Blind Human Evaluation Packager (`evaluation/prepare_human_eval.py`), Google Form Blueprint & Bilingual EN/FR Manuals (`docs/human_eval/`) | Standardized the ~15-participant human study around a **15–20 minute** single-pass pair-by-pair flow (`~6 min` watching + `~10 min` grading) combining 1–5 absolute ratings (**Personal Relevance**, **Creativity**, **Engagement**, **Overall Preference**) with per-pair forced/tie preference (`Video A` / `Video B` / `No preference`). `prepare_human_eval.py` automates balanced per-pair `AB`/`BA` blinding, optional pre-filled Google Form links, `.zip` bundles, and CSV unblinding/Wilcoxon analysis reusing `evaluation.llm_judge` stats. Bilingual EN/FR participant guides live in `docs/human_eval/`. | Separate absolute and pairwise watching passes (~25–30 min fatigue); Excel workbooks per participant (poor mobile UX); local HTML grader (`file://` browser friction) |
 | 2026-11-11 | `16384`-Token Reasoner Headroom Floor & `ScriptwriterAgent.refine()` Scene-Count Integrity Guard (`v4.6.1`) | DeepSeek Reasoner spent `7,405 / 8,192` completion tokens thinking on `charles_part1` Phase 7 (`agentic_charles_part1_20261111_170104`), silently truncating a 6-scene draft to 4 scenes after `extract_json()` bracket repair. Doubled thinking headroom floor in `llm_client.py` (`8192 -> 16384`) and added a 1-shot retry + trailing draft-scene preservation guard (plus `sanitize_scenes()`) in `ScriptwriterAgent.refine()`. | Increasing `max_tokens` only in `ScriptwriterAgent` (leaves Draft/Baseline/Director vulnerable to thinking exhaustion) |
 | 2026-11-11 | Cluster-Weighted Profiling (`dominant_clusters`) & Pairwise Relevance Rubric Alignment (`v4.6`) | Eliminated 1-video outlier tunnel vision (`[vid4]` Chubbyemu eclipse of `8/26` GoT on `max`; 1-off props eclipsing `7/30` `#mathctober` on `charles_part1`). Preserves frequency-ranked `dominant_clusters` + full watch-history titles across Round 1 -> Round 2 -> `WritersRoomAgent` -> `DirectorAgent` (`CLUSTER-ANCHORED DIVERSITY` forcing Pitch 1 on cluster #1 and Pitch 2 on cluster #2), and aligns `evaluation/llm_judge.py:build_pair_prompt()` item `1. relevance` with `METRICS["relevance"]` (anti-regurgitation `3/5` cap for direct remakes). | Tuning only Round 1 transcript count without changing Round 2 / Writers' Room / Pairwise judge prompt |

@@ -100,14 +100,9 @@
   downloadBtn.onmouseenter = () => { downloadBtn.style.opacity = "0.9"; };
   downloadBtn.onmouseleave = () => { downloadBtn.style.opacity = "1"; };
 
-  const copyBtn = createEl("button", "background:#1e293b;color:#f1f5f9;border:1px solid rgba(255,255,255,0.08);padding:9px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;transition:background 0.15s ease;", "Copy JSON to Clipboard");
-  copyBtn.onmouseenter = () => { copyBtn.style.background = "#283548"; };
-  copyBtn.onmouseleave = () => { copyBtn.style.background = "#1e293b"; };
-
-  const noteEl = createEl("div", "font-size:11px;color:#64748b;text-align:center;margin-top:2px;", "HKUST COMP 4221 Study • Exactly 90 Shorts (3x30 split)");
+  const noteEl = createEl("div", "font-size:11px;color:#64748b;text-align:center;margin-top:2px;", "HKUST COMP 4221 Study • Up to 90 Shorts (3x30 split)");
 
   actionsBox.appendChild(downloadBtn);
-  actionsBox.appendChild(copyBtn);
   actionsBox.appendChild(noteEl);
   container.appendChild(actionsBox);
 
@@ -295,8 +290,8 @@
     return;
   }
 
-  statusEl.textContent = `Successfully extracted exactly ${shortsList.length} Shorts!`;
-  console.log(`%c[Shorts Collector] Ready! Total Shorts: ${shortsList.length} (3x30 ready)`, "color: #10b981; font-weight: bold; font-size: 13px;");
+  statusEl.textContent = `Successfully extracted ${shortsList.length} Shorts!`;
+  console.log(`%c[Shorts Collector] Ready! Total Shorts: ${shortsList.length}`, "color: #10b981; font-weight: bold; font-size: 13px;");
 
   previewList.style.display = "block";
   previewList.replaceChildren();
@@ -311,7 +306,7 @@
   });
 
   if (shortsList.length > 5) {
-    const extra = createEl("div", "color:#64748b;font-size:11px;margin-top:6px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.06);", `+ ${shortsList.length - 5} more videos (90 total)`);
+    const extra = createEl("div", "color:#64748b;font-size:11px;margin-top:6px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.06);", `+ ${shortsList.length - 5} more videos (${shortsList.length} total)`);
     previewList.appendChild(extra);
   }
 
@@ -335,26 +330,6 @@
     console.log("[Shorts Collector] JSON file downloaded.");
     setTimeout(() => {
       downloadBtn.textContent = `Download JSON (${shortsList.length} Shorts)`;
-    }, 2500);
-  };
-
-  // Copy Handler
-  copyBtn.onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(jsonString);
-      copyBtn.textContent = "Copied to clipboard!";
-      console.log("[Shorts Collector] JSON copied to clipboard.");
-    } catch (err) {
-      const ta = document.createElement("textarea");
-      ta.value = jsonString;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      copyBtn.textContent = "Copied to clipboard!";
-    }
-    setTimeout(() => {
-      copyBtn.textContent = "Copy JSON to Clipboard";
     }, 2500);
   };
 })();
